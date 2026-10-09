@@ -104,7 +104,7 @@ const STRINGS = {
     // Orb
     orbHeading: "交互悬浮球",
     showOrb: "显示阅读视图悬浮球",
-    showOrbDesc: "在阅读视图边缘常驻快速操作青蛙徽章",
+    showOrbDesc: "在阅读视图边缘显示青蛙按钮，点击开关当前笔记的翻译层",
     orbOpacity: "静止透明度",
     orbPosition: "停靠位置",
     posRightMiddle: "右侧居中",
@@ -121,7 +121,7 @@ const STRINGS = {
     orbDisable: "关闭翻译层",
 
     // Commands
-    cmdToggle: "全文双语对照翻译",
+    cmdToggle: "开关当前笔记翻译层",
     cmdClear: "清除所有注入译文",
     cmdCycle: "快速轮换翻译引擎",
     engineSwitched: "当前翻译引擎已切换为：",
@@ -208,7 +208,7 @@ const STRINGS = {
     // Orb
     orbHeading: "交互懸浮球",
     showOrb: "顯示閱讀視圖懸浮球",
-    showOrbDesc: "在閱讀視圖邊緣常駐快速操作青蛙徽章",
+    showOrbDesc: "在閱讀視圖邊緣顯示青蛙按鈕，點擊開關當前筆記的翻譯層",
     orbOpacity: "靜止透明度",
     orbPosition: "停靠位置",
     posRightMiddle: "右側居中",
@@ -225,7 +225,7 @@ const STRINGS = {
     orbDisable: "關閉翻譯層",
 
     // Commands
-    cmdToggle: "全文雙語對照翻譯",
+    cmdToggle: "開關當前筆記翻譯層",
     cmdClear: "清除所有注入譯文",
     cmdCycle: "快速輪換翻譯引擎",
     engineSwitched: "當前翻譯引擎已切換為：",
@@ -312,7 +312,7 @@ const STRINGS = {
     // Orb
     orbHeading: "Floating Orb",
     showOrb: "Show floating orb",
-    showOrbDesc: "Docked semi-hidden button at the reading view margin",
+    showOrbDesc: "A docked button that toggles translations for the current note",
     orbOpacity: "Orb resting opacity",
     orbPosition: "Orb dock position",
     posRightMiddle: "Right middle",
@@ -329,7 +329,7 @@ const STRINGS = {
     orbDisable: "Hide translations",
 
     // Commands
-    cmdToggle: "Toggle full-note translation",
+    cmdToggle: "Toggle translation layer",
     cmdClear: "Clear injected translations",
     cmdCycle: "Cycle translation engine",
     engineSwitched: "Switched translation engine to: ",
