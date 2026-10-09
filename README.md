@@ -83,12 +83,12 @@
 
 #### 手动安装
 1. 从 [Releases](https://github.com/Meatballovsky/obsidian-naiyi-translator/releases) 页面下载最新发布的 `main.js`、`manifest.json`、`styles.css`。
-2. 将文件解压放入笔记库目录：`<YourVault>/.obsidian/plugins/obsidian-naiyi-translator/`。
+2. 将文件解压放入笔记库目录：`<YourVault>/.obsidian/plugins/naiyi-translate/`。
 3. 在 Obsidian 设置中启用即可。
 
 ### 使用指南
 
-1. 前往 **Obsidian 设置 → 第三方插件**，启用 **Naiyi Translate (奈译屋)**。
+1. 前往 **Obsidian 设置 → 第三方插件**，启用 **Naiyi Translate**。
 2. 打开任意外文笔记切换至 **阅读视图**，右侧边缘将出现交互悬浮球（支持拖拽吸附边缘）。
 3. 点击展开悬浮球控制盘，或使用快捷命令面板（`Ctrl/Cmd + P`）：
    - `Toggle full-note translation`：全文双语对照渲染
