@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { FROG_ORB_SVG } from "../src/ui/icons";
 import {
   collectUnits,
   extractText,
@@ -324,6 +325,81 @@ async function main(): Promise<void> {
       "cleanup must leave no residue"
     );
     assert.equal(root.querySelectorAll(`[${UNIT_ATTRIBUTE}]`).length, 0);
+  });
+
+  await test("orb parses as SVG in HTML, with grayscale paths and no lettering", () => {
+    const button = document.createElement("button");
+    button.innerHTML = FROG_ORB_SVG;
+    const svg = button.querySelector("svg")!;
+    assert.ok(svg);
+    assert.equal(svg.namespaceURI, "http://www.w3.org/2000/svg");
+    assert.ok(svg.querySelectorAll("path").length > 10);
+    assert.equal(svg.querySelectorAll("text, image").length, 0);
+    for (const path of svg.querySelectorAll("path")) {
+      assert.match(path.getAttribute("fill")!, /^#([0-9a-f]{2})\1\1$/i);
+    }
+  });
+
+  await test("shading follows inline Markdown while typography matches source", async () => {
+    const pane = document.createElement("div");
+    pane.innerHTML = '<h2 style="font-size: 24px; font-weight: 600; color: rgb(30, 30, 30); line-height: 36px">Heading</h2>';
+    document.body.appendChild(pane);
+    const source = pane.firstElementChild as HTMLElement;
+    const before = source.outerHTML;
+    inject(source, { state: "done", translation: "标题", renderMarkdown: true }, async (content) => {
+      content.innerHTML = '<p>译文 <strong>重点</strong> <a href="#ref">链接</a></p>';
+    });
+    await Promise.resolve();
+    const wrapper = source.nextElementSibling as HTMLElement;
+    assert.equal(wrapper.style.fontSize, "24px");
+    assert.equal(wrapper.style.fontWeight, "600");
+    assert.equal(wrapper.style.lineHeight, "36px");
+    assert.ok(wrapper.querySelector("p > .obstr-shaded-text > strong"));
+    assert.ok(wrapper.querySelector(".obstr-shaded-text > a"));
+    assert.equal(source.outerHTML.replace(' data-obstr-unit="done"', ''), before);
+    clearInjected(pane);
+    assert.equal(source.outerHTML, before);
+    pane.remove();
+  });
+
+  await test("late Markdown render cannot overwrite a newer translation", async () => {
+    const source = document.createElement("p");
+    document.body.appendChild(source);
+    let resolve!: () => void;
+    inject(source, { state: "done", translation: "old", renderMarkdown: true }, async (content) => {
+      await new Promise<void>((done) => { resolve = done; });
+      content.textContent = "old";
+    });
+    inject(source, { state: "done", translation: "new" }, () => {});
+    resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(source.nextElementSibling?.textContent, "new");
+    source.nextElementSibling?.remove();
+    source.remove();
+  });
+
+  await test("multi-paragraph quotes do not shade Markdown whitespace as empty lines", () => {
+    const pane = document.createElement("div");
+    pane.innerHTML = '<blockquote><p>First quoted paragraph.<br>Second line.</p><p>Another quoted paragraph.</p></blockquote>';
+    document.body.appendChild(pane);
+    const source = pane.querySelector("p")!;
+    const originalUnits = collectUnits(pane).map((unit) => unit.text);
+    inject(source, { state: "done", translation: "引用译文", renderMarkdown: true }, (content) => {
+      // MarkdownRenderer emits separator newlines between its block elements.
+      content.innerHTML = '\n<p>第一段译文。<br>第二行。</p>\n<p>第二段 <strong>重点</strong>。</p>\n<p>— 作者与日期</p>\n';
+    });
+    const body = source.nextElementSibling!.querySelector(".obstr-text")!;
+    const shades = Array.from(body.querySelectorAll(".obstr-shaded-text"));
+    assert.equal(shades.length, 3, "only the three real paragraphs need shading");
+    assert.equal(body.querySelectorAll(":scope > .obstr-shaded-text").length, 0,
+      "separator newlines must not become padded inline boxes between paragraphs");
+    assert.ok(shades.every((shade) => !!shade.textContent?.trim()));
+    assert.equal(body.querySelectorAll("br").length, 1, "keep intentional line breaks");
+    assert.ok(body.querySelector(".obstr-shaded-text > strong"));
+    assert.deepEqual(collectUnits(pane).map((unit) => unit.text), originalUnits);
+    clearInjected(pane);
+    pane.remove();
   });
 
   console.log(results.join("\n"));

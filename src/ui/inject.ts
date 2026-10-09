@@ -17,6 +17,51 @@ export interface InjectOptions {
 
 export type Renderer = (container: HTMLElement, markdown: string) => void | Promise<void>;
 
+const renderVersions = new WeakMap<HTMLElement, number>();
+
+/** Sibling wrappers cannot inherit styles applied directly to the source block. */
+function matchTypography(source: HTMLElement, wrapper: HTMLElement): void {
+  const computed = source.ownerDocument.defaultView?.getComputedStyle(source);
+  if (!computed) return;
+  for (const property of [
+    "font-family", "font-size", "font-weight", "font-style", "line-height",
+    "letter-spacing", "color", "text-align", "text-indent", "text-transform",
+  ]) {
+    wrapper.style.setProperty(property, computed.getPropertyValue(property));
+  }
+}
+
+/** Wrap inline runs, leaving Markdown blocks and formula DOM intact. */
+function shadeText(container: HTMLElement): void {
+  const blocks = new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6",
+    "UL", "OL", "LI", "BLOCKQUOTE", "PRE", "TABLE", "THEAD", "TBODY", "TR", "TD", "TH"]);
+  let run: ChildNode[] = [];
+  const flush = () => {
+    // MarkdownRenderer inserts newline text nodes between blocks. A padded span
+    // around those invisible separators creates a visible empty line and stripe.
+    const hasContent = run.some((node) =>
+      node.nodeType === 3 ? !!node.textContent?.trim() : node.nodeType === 1
+        && (node as HTMLElement).tagName !== "BR"
+    );
+    if (hasContent) {
+      const shade = container.ownerDocument.createElement("span");
+      shade.className = "obstr-shaded-text";
+      container.insertBefore(shade, run[0]);
+      shade.append(...run);
+    }
+    run = [];
+  };
+  for (const node of Array.from(container.childNodes)) {
+    if (node.nodeType === 1 && blocks.has((node as HTMLElement).tagName)) {
+      flush();
+      if ((node as HTMLElement).tagName !== "PRE") shadeText(node as HTMLElement);
+    } else {
+      run.push(node);
+    }
+  }
+  flush();
+}
+
 function makeWrapper(style: string = "card"): HTMLElement {
   const wrapper = document.createElement("div");
   wrapper.className = `${WRAPPER_CLASS} obstr-style-${style} notranslate`;
@@ -67,6 +112,14 @@ export function inject(
 
   const body = wrapper.querySelector<HTMLElement>(`.${TEXT_CLASS}`);
   if (!body) return;
+  matchTypography(el, wrapper);
+  if (options.state === "error") {
+    // Allow the error rules to override the source's normal text styling.
+    wrapper.style.removeProperty("color");
+    wrapper.style.removeProperty("font-size");
+  }
+  const version = (renderVersions.get(body) ?? 0) + 1;
+  renderVersions.set(body, version);
 
   if (options.state === "pending") {
     body.textContent = "";
@@ -88,10 +141,20 @@ export function inject(
   }
 
   body.textContent = "";
+  // Render off-DOM so a late Markdown render cannot overwrite a newer state.
+  const content = el.ownerDocument.createElement("div");
+  const finish = () => {
+    if (renderVersions.get(body) !== version) return;
+    if (style === "card") shadeText(content);
+    body.replaceChildren(...Array.from(content.childNodes));
+  };
   if (options.renderMarkdown) {
-    void render(body, text);
+    const result = render(content, text);
+    if (result) void result.then(finish);
+    else finish();
   } else {
-    body.textContent = text;
+    content.textContent = text;
+    finish();
   }
 }
 

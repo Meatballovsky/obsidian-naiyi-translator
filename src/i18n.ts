@@ -42,7 +42,7 @@ const STRINGS = {
     styleHeading: "排版与译文样式",
     translationStyle: "译文渲染样式",
     translationStyleDesc: "选择就地插入段落下方时的视觉排版风格",
-    styleCard: "底纹卡片 (陪读蛙经典微灰/奶白底纹)",
+    styleCard: "文字底纹 (灰/奶白底纹，沿用原文排版)",
     styleQuote: "引用边线 (经典段落左侧边线)",
     styleMinimal: "极简弱化 (无底纹虚线分割)",
 
@@ -151,7 +151,7 @@ const STRINGS = {
     styleHeading: "排版與譯文樣式",
     translationStyle: "譯文渲染樣式",
     translationStyleDesc: "選擇就地插入段落下方時的視覺排版風格",
-    styleCard: "底紋卡片 (陪讀蛙經典微灰/奶白底紋)",
+    styleCard: "文字底紋 (灰/奶白底紋，沿用原文排版)",
     styleQuote: "引用邊線 (經典段落左側邊線)",
     styleMinimal: "極簡弱化 (無底紋虛線分割)",
 
@@ -260,7 +260,7 @@ const STRINGS = {
     styleHeading: "Appearance & Style",
     translationStyle: "Translation style",
     translationStyleDesc: "How translated text is rendered beneath original paragraphs",
-    styleCard: "Shaded card (ReadFrog classic soft background)",
+    styleCard: "Text shading (ReadFrog background, original typography)",
     styleQuote: "Blockquote border (Classic left accent border)",
     styleMinimal: "Minimal unbordered (Dashed divider)",
 
