@@ -296,6 +296,21 @@ async function main(): Promise<void> {
     pane.remove();
   });
 
+  await test("inject applies requested style class on the wrapper", () => {
+    const unit = collectUnits(root).find((candidate) => candidate.text === "Bullet one")!;
+    inject(unit.el, { state: "done", translation: "项目一", style: "card" }, (el, md) => {
+      el.textContent = md;
+    });
+    const wrapper = unit.el.nextElementSibling as HTMLElement;
+    assert.ok(wrapper.classList.contains("obstr-style-card"));
+
+    inject(unit.el, { state: "done", translation: "项目一", style: "quote" }, (el, md) => {
+      el.textContent = md;
+    });
+    assert.ok(!wrapper.classList.contains("obstr-style-card"));
+    assert.ok(wrapper.classList.contains("obstr-style-quote"));
+  });
+
   await test("clearing restores the DOM to the original node count", () => {
     assert.ok(
       root.querySelectorAll(`.${WRAPPER_CLASS}`).length > 0,

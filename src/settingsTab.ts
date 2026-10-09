@@ -1,32 +1,38 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 
-import type { EngineId, OrbPosition, TranslatorSettings } from "./settings";
+import type { EngineId, OrbPosition, TranslationStyle } from "./settings";
 import type TranslatorOrbPlugin from "./main";
+import { FULL_LOGO_SVG } from "./ui/icons";
+import { t, type TranslationKey } from "./i18n";
 
 const LANGUAGES: [string, string][] = [
-  ["auto", "Auto detect"],
+  ["auto", "Auto detect (自动检测)"],
+  ["zh-CN", "简体中文 (Simplified Chinese)"],
+  ["zh-TW", "繁體中文 (Traditional Chinese)"],
   ["en", "English"],
-  ["zh-CN", "Chinese (Simplified)"],
-  ["zh-TW", "Chinese (Traditional)"],
-  ["ja", "Japanese"],
-  ["ko", "Korean"],
-  ["fr", "French"],
-  ["de", "German"],
-  ["es", "Spanish"],
-  ["ru", "Russian"],
-  ["pt", "Portuguese"],
-  ["it", "Italian"],
-  ["ar", "Arabic"],
-  ["vi", "Vietnamese"],
+  ["ja", "日本語 (Japanese)"],
+  ["ko", "한국어 (Korean)"],
+  ["fr", "Français (French)"],
+  ["de", "Deutsch (German)"],
+  ["es", "Español (Spanish)"],
+  ["ru", "Русский (Russian)"],
+  ["pt", "Português (Portuguese)"],
+  ["it", "Italiano (Italian)"],
+  ["ar", "العربية (Arabic)"],
+  ["vi", "Tiếng Việt (Vietnamese)"],
 ];
 
 const ENGINES: [EngineId, string][] = [
   ["google", "Google (free, no key)"],
   ["microsoft", "Microsoft Edge (free, no key)"],
-  ["ai", "Custom AI endpoint"],
+  ["ai", "Custom AI endpoint (OpenAI / Ollama / OMLX)"],
 ];
 
-const ORB_POSITIONS: OrbPosition[] = ["right-middle", "left-middle", "custom"];
+const ORB_POSITIONS: [OrbPosition, TranslationKey][] = [
+  ["right-middle", "posRightMiddle"],
+  ["left-middle", "posLeftMiddle"],
+  ["custom", "posCustom"],
+];
 
 export class TranslatorSettingTab extends PluginSettingTab {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -58,6 +64,15 @@ export class TranslatorSettingTab extends PluginSettingTab {
     const settings = this.plugin.settings;
     containerEl.empty();
 
+    // Hero Banner with Flat Logo
+    const heroEl = containerEl.createDiv({ cls: "obstr-settings-hero" });
+    const logoEl = heroEl.createDiv({ cls: "obstr-settings-hero-logo" });
+    logoEl.innerHTML = FULL_LOGO_SVG;
+
+    const textEl = heroEl.createDiv({ cls: "obstr-settings-hero-text" });
+    textEl.createEl("h3", { text: t("pluginTitle"), cls: "obstr-settings-hero-title" });
+    textEl.createEl("p", { text: t("pluginSubtitle"), cls: "obstr-settings-hero-subtitle" });
+
     const commit = () => this.debouncedSave();
 
     const numberField = (
@@ -81,10 +96,12 @@ export class TranslatorSettingTab extends PluginSettingTab {
         );
     };
 
-    new Setting(containerEl).setName("Engine").setHeading();
+    // Engine Section
+    new Setting(containerEl).setName(t("engineHeading")).setHeading();
 
     new Setting(containerEl)
-      .setName("Translation engine")
+      .setName(t("engineSelect"))
+      .setDesc(t("engineDesc"))
       .addDropdown((dropdown) => {
         for (const [value, label] of ENGINES) dropdown.addOption(value, label);
         dropdown.setValue(settings.engine).onChange(async (value) => {
@@ -95,8 +112,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Probe engine")
-      .setDesc("Sends one short sentence to the active engine and shows the result.")
+      .setName(t("probeEngine"))
+      .setDesc(t("probeEngineDesc"))
       .addButton((button) => {
         button.setButtonText("Test").onClick(async () => {
           button.setDisabled(true);
@@ -104,6 +121,25 @@ export class TranslatorSettingTab extends PluginSettingTab {
           button.setDisabled(false);
         });
       });
+
+    // Style Section
+    new Setting(containerEl).setName(t("styleHeading")).setHeading();
+
+    new Setting(containerEl)
+      .setName(t("translationStyle"))
+      .setDesc(t("translationStyleDesc"))
+      .addDropdown((dropdown) => {
+        dropdown.addOption("card", t("styleCard"));
+        dropdown.addOption("quote", t("styleQuote"));
+        dropdown.addOption("minimal", t("styleMinimal"));
+        dropdown.setValue(settings.translationStyle).onChange(async (value) => {
+          settings.translationStyle = value as TranslationStyle;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    // Languages Section
+    new Setting(containerEl).setName(t("langHeading")).setHeading();
 
     const languageDropdown = (
       label: string,
@@ -120,16 +156,19 @@ export class TranslatorSettingTab extends PluginSettingTab {
           });
         });
     };
-    languageDropdown("Target language", settings.targetLang, (value) => {
+    languageDropdown(t("targetLang"), settings.targetLang, (value) => {
       settings.targetLang = value;
     });
-    languageDropdown("Source language", settings.sourceLang, (value) => {
+    languageDropdown(t("sourceLang"), settings.sourceLang, (value) => {
       settings.sourceLang = value;
     });
 
+    // Markdown Section
+    new Setting(containerEl).setName(t("mdHeading")).setHeading();
+
     new Setting(containerEl)
-      .setName("Render translation as Markdown")
-      .setDesc("Needed when the AI engine returns lists, bold text or links.")
+      .setName(t("renderMd"))
+      .setDesc(t("renderMdDesc"))
       .addToggle((toggle) =>
         toggle.setValue(settings.renderMarkdown).onChange(async (value) => {
           settings.renderMarkdown = value;
@@ -137,16 +176,15 @@ export class TranslatorSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl).setName("Custom AI endpoint").setHeading();
+    // Custom AI Endpoint Section
+    new Setting(containerEl).setName(t("aiHeading")).setHeading();
 
     new Setting(containerEl)
-      .setName("Base URL")
-      .setDesc(
-        "Any OpenAI-compatible server. Local endpoints work on 127.0.0.1: Obsidian sends requests through its own network layer, so there is no CORS or private-network preflight to work around."
-      )
+      .setName(t("aiBaseUrl"))
+      .setDesc(t("aiBaseUrlDesc"))
       .addText((text) =>
         text
-          .setPlaceholder("http://127.0.0.1:8000/v1")
+          .setPlaceholder("http://127.0.0.1:11434/v1")
           .setValue(settings.ai.baseUrl)
           .onChange(async (value) => {
             settings.ai.baseUrl = value.trim();
@@ -155,7 +193,7 @@ export class TranslatorSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Model")
+      .setName(t("aiModel"))
       .addText((text) =>
         text
           .setPlaceholder("qwen2.5:7b")
@@ -167,8 +205,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Fetch model list")
-      .setDesc("Reads /v1/models from the endpoint above.")
+      .setName(t("aiFetchModels"))
+      .setDesc(t("aiFetchModelsDesc"))
       .addButton((button) => {
         button.setButtonText("Fetch").onClick(async () => {
           button.setDisabled(true);
@@ -180,7 +218,7 @@ export class TranslatorSettingTab extends PluginSettingTab {
 
     if (this.plugin.availableModels.length > 0) {
       new Setting(containerEl)
-        .setName("Pick model")
+        .setName(t("aiPickModel"))
         .addDropdown((dropdown) => {
           dropdown.addOption("", "Choose…");
           for (const id of this.plugin.availableModels) dropdown.addOption(id, id);
@@ -194,8 +232,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName("API key")
-      .setDesc("Only needed for hosted endpoints. Stored in this vault's plugin data.json.")
+      .setName(t("aiApiKey"))
+      .setDesc(t("aiApiKeyDesc"))
       .addText((text) => {
         text.inputEl.type = "password";
         text.setValue(settings.ai.apiKey).onChange(async (value) => {
@@ -205,10 +243,9 @@ export class TranslatorSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Temperature")
+      .setName(t("aiTemperature"))
       .addSlider((slider) => {
         slider.setLimits(0, 1, 0.05).setValue(settings.ai.temperature).setDynamicTooltip();
-        // Non-instant so the request budget is not rewritten on every drag frame.
         slider.setInstant(false);
         slider.onChange((value) => {
           settings.ai.temperature = value;
@@ -217,10 +254,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Disable model thinking")
-      .setDesc(
-        "Sends reasoning_effort=none. Chain of thought doubles latency on a local model and does not improve translation."
-      )
+      .setName(t("aiDisableThinking"))
+      .setDesc(t("aiDisableThinkingDesc"))
       .addToggle((toggle) =>
         toggle.setValue(settings.ai.disableThinking).onChange(async (value) => {
           settings.ai.disableThinking = value;
@@ -229,8 +264,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       );
 
     numberField(
-      "AI request timeout (ms)",
-      "Local models pay loading cost on the first request, so this is separate from the free-API timeout.",
+      t("aiTimeout"),
+      t("aiTimeoutDesc"),
       settings.ai.timeoutMs,
       1000,
       (value) => {
@@ -239,8 +274,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
     );
 
     new Setting(containerEl)
-      .setName("System prompt")
-      .setDesc("Placeholders: {{targetLang}} {{sourceLang}}")
+      .setName(t("systemPrompt"))
+      .setDesc(t("systemPromptDesc"))
       .addTextArea((area) =>
         area.setValue(settings.ai.systemPrompt).onChange(async (value) => {
           settings.ai.systemPrompt = value;
@@ -249,8 +284,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("User prompt")
-      .setDesc("Placeholders: {{input}} {{targetLang}}")
+      .setName(t("userPrompt"))
+      .setDesc(t("userPromptDesc"))
       .addTextArea((area) =>
         area.setValue(settings.ai.userPrompt).onChange(async (value) => {
           settings.ai.userPrompt = value;
@@ -258,11 +293,12 @@ export class TranslatorSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl).setName("Requests").setHeading();
+    // Requests Section
+    new Setting(containerEl).setName(t("requestsHeading")).setHeading();
 
     numberField(
-      "Preload band (px)",
-      "How far ahead of the viewport paragraphs get translated.",
+      t("preloadBand"),
+      t("preloadBandDesc"),
       settings.preloadMarginPx,
       0,
       (value) => {
@@ -270,8 +306,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       }
     );
     numberField(
-      "Max concurrent requests",
-      "Token bucket capacity. Free endpoints rate-limit aggressively, so keep this small.",
+      t("requestCapacity"),
+      t("requestCapacityDesc"),
       settings.requestCapacity,
       1,
       (value) => {
@@ -279,8 +315,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       }
     );
     numberField(
-      "Requests per second",
-      "Token refill rate. Google's free endpoint starts returning 429 well before a local model does.",
+      t("requestRate"),
+      t("requestRateDesc"),
       settings.requestRate,
       1,
       (value) => {
@@ -288,8 +324,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       }
     );
     numberField(
-      "Batch size (paragraphs)",
-      "Ignored for Google, whose reply cannot be mapped back 1:1.",
+      t("batchItems"),
+      t("batchItemsDesc"),
       settings.maxItemsPerBatch,
       1,
       (value) => {
@@ -297,8 +333,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       }
     );
     numberField(
-      "Batch size (characters)",
-      "Ceiling on one request's payload.",
+      t("batchChars"),
+      "",
       settings.maxCharsPerBatch,
       1,
       (value) => {
@@ -306,34 +342,39 @@ export class TranslatorSettingTab extends PluginSettingTab {
       }
     );
     numberField(
-      "Free-API request timeout (ms)",
-      "Does not apply to the AI endpoint, which uses its own budget.",
+      t("requestTimeout"),
+      "",
       settings.requestTimeoutMs,
       1000,
       (value) => {
         settings.requestTimeoutMs = value;
       }
     );
-    numberField("Retries", "", settings.maxRetries, 0, (value) => {
+    numberField(t("maxRetries"), "", settings.maxRetries, 0, (value) => {
       settings.maxRetries = value;
     });
+
+    // Filter Section
+    new Setting(containerEl).setName(t("filterHeading")).setHeading();
     numberField(
-      "Skip paragraphs under (characters)",
-      "0 translates everything including single words.",
+      t("minChars"),
+      "",
       settings.minCharactersPerNode,
       0,
       (value) => {
         settings.minCharactersPerNode = value;
       }
     );
-    numberField("Skip paragraphs under (words)", "", settings.minWordsPerNode, 0, (value) => {
+    numberField(t("minWords"), "", settings.minWordsPerNode, 0, (value) => {
       settings.minWordsPerNode = value;
     });
 
-    new Setting(containerEl).setName("Floating orb").setHeading();
+    // Floating Orb Section
+    new Setting(containerEl).setName(t("orbHeading")).setHeading();
 
     new Setting(containerEl)
-      .setName("Show orb")
+      .setName(t("showOrb"))
+      .setDesc(t("showOrbDesc"))
       .addToggle((toggle) =>
         toggle.setValue(settings.showOrb).onChange(async (value) => {
           settings.showOrb = value;
@@ -342,7 +383,7 @@ export class TranslatorSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Resting opacity")
+      .setName(t("orbOpacity"))
       .addSlider((slider) => {
         slider.setLimits(0.05, 1, 0.05).setValue(settings.orbOpacity).setDynamicTooltip();
         slider.setInstant(false);
@@ -353,10 +394,11 @@ export class TranslatorSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Dock side")
-      .setDesc("Dragging the orb overrides this; it snaps to the nearer edge.")
+      .setName(t("orbPosition"))
       .addDropdown((dropdown) => {
-        for (const value of ORB_POSITIONS) dropdown.addOption(value, value);
+        for (const [pos, key] of ORB_POSITIONS) {
+          dropdown.addOption(pos, t(key));
+        }
         dropdown.setValue(settings.orbPosition).onChange(async (value) => {
           settings.orbPosition = value as OrbPosition;
           if (value !== "custom") {
@@ -368,8 +410,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Translate on selection")
-      .setDesc("Translates the paragraphs a selection touches when you release the mouse.")
+      .setName(t("autoTranslateSelect"))
+      .setDesc(t("autoTranslateSelectDesc"))
       .addToggle((toggle) =>
         toggle.setValue(settings.autoTranslateOnSelect).onChange(async (value) => {
           settings.autoTranslateOnSelect = value;
@@ -377,10 +419,12 @@ export class TranslatorSettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl).setName("Cache").setHeading();
+    // Cache Section
+    new Setting(containerEl).setName(t("cacheHeading")).setHeading();
 
     new Setting(containerEl)
-      .setName("Reuse cached translations")
+      .setName(t("enableCache"))
+      .setDesc(t("enableCacheDesc"))
       .addToggle((toggle) =>
         toggle.setValue(settings.enableCache).onChange(async (value) => {
           settings.enableCache = value;
@@ -388,20 +432,20 @@ export class TranslatorSettingTab extends PluginSettingTab {
         })
       );
 
-    numberField("Cache TTL (days)", "0 keeps entries forever.", settings.cacheTtlDays, 0, (value) => {
+    numberField(t("cacheTtl"), "", settings.cacheTtlDays, 0, (value) => {
       settings.cacheTtlDays = value;
     });
-    numberField("Max cached entries", "", settings.cacheMaxEntries, 1, (value) => {
+    numberField(t("cacheMax"), "", settings.cacheMaxEntries, 1, (value) => {
       settings.cacheMaxEntries = value;
     });
 
     new Setting(containerEl)
-      .setName("Clear cache")
-      .setDesc("Paragraphs already translated in this vault forget their results.")
+      .setName(t("clearCache"))
+      .setDesc(t("clearCacheDesc"))
       .addButton((button) => {
         button.setButtonText("Clear").onClick(() => {
           this.plugin.clearCache();
-          new Notice("Translation cache cleared.", 2500);
+          new Notice(t("cacheCleared"), 2500);
         });
       });
   }

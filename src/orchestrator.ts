@@ -214,7 +214,7 @@ export class Orchestrator {
     }
 
     this.units.set(el, { text, status: "pending" });
-    markPending(el, this.render);
+    markPending(el, this.render, settings.translationStyle);
 
     const sessionId = this.sessionId;
     try {
@@ -239,7 +239,7 @@ export class Orchestrator {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
-      inject(el, { state: "error", translation: message }, this.render);
+      inject(el, { state: "error", translation: message, style: settings.translationStyle }, this.render);
       this.units.set(el, { text, status: "pending" });
     } finally {
       // Only the session that is still current may move the counter the orb shows.
@@ -260,6 +260,7 @@ export class Orchestrator {
         state: noop ? "skipped" : "done",
         translation,
         renderMarkdown: settings.renderMarkdown,
+        style: settings.translationStyle,
       },
       this.render
     );

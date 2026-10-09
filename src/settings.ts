@@ -2,6 +2,8 @@ export type EngineId = "google" | "microsoft" | "ai";
 
 export type OrbPosition = "right-middle" | "left-middle" | "custom";
 
+export type TranslationStyle = "card" | "quote" | "minimal";
+
 export interface AiEndpointSettings {
   baseUrl: string;
   apiKey: string;
@@ -21,6 +23,7 @@ export interface TranslatorSettings {
   engine: EngineId;
   sourceLang: string;
   targetLang: string;
+  translationStyle: TranslationStyle;
 
   /** IntersectionObserver rootMargin preload band in px. */
   preloadMarginPx: number;
@@ -71,6 +74,7 @@ export const DEFAULT_SETTINGS: TranslatorSettings = {
   engine: "google",
   sourceLang: "auto",
   targetLang: "zh-CN",
+  translationStyle: "card",
 
   preloadMarginPx: 600,
   requestCapacity: 4,

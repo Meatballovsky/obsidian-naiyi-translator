@@ -1,4 +1,6 @@
 import type { TranslatorSettings, OrbPosition } from "../settings";
+import { FROG_ORB_SVG } from "./icons";
+import { t } from "../i18n";
 
 export interface OrbActions {
   onToggle: () => void;
@@ -36,16 +38,16 @@ export class FloatingOrb {
     this.ball = document.createElement("button");
     this.ball.type = "button";
     this.ball.className = "obstr-orb-ball";
-    this.ball.setAttribute("aria-label", "Translator orb");
-    this.ball.textContent = "译";
+    this.ball.setAttribute("aria-label", t("pluginTitle"));
+    this.ball.innerHTML = FROG_ORB_SVG;
 
     this.menu = document.createElement("div");
     this.menu.className = "obstr-orb-menu";
     this.menu.append(
-      this.item("翻译全文", () => this.actions.onToggle()),
-      this.item("只译选区", () => this.actions.onTranslateSelection()),
-      this.item("停止", () => this.actions.onStop()),
-      this.item("清除译文", () => this.actions.onClear())
+      this.item(t("orbToggle"), () => this.actions.onToggle()),
+      this.item(t("orbSelection"), () => this.actions.onTranslateSelection()),
+      this.item(t("orbStop"), () => this.actions.onStop()),
+      this.item(t("orbClear"), () => this.actions.onClear())
     );
 
     this.root.append(this.ball, this.menu);

@@ -11,13 +11,15 @@ export interface InjectOptions {
   translation?: string;
   /** Rendered as Markdown by the caller when the engine returns formatting. */
   renderMarkdown?: boolean;
+  /** Translation rendering style (e.g. "card", "quote", "minimal") */
+  style?: string;
 }
 
 export type Renderer = (container: HTMLElement, markdown: string) => void | Promise<void>;
 
-function makeWrapper(): HTMLElement {
+function makeWrapper(style: string = "card"): HTMLElement {
   const wrapper = document.createElement("div");
-  wrapper.className = `${WRAPPER_CLASS} notranslate`;
+  wrapper.className = `${WRAPPER_CLASS} obstr-style-${style} notranslate`;
   const body = document.createElement("div");
   body.className = TEXT_CLASS;
   wrapper.appendChild(body);
@@ -51,10 +53,14 @@ export function inject(
   options: InjectOptions,
   render: Renderer
 ): void {
+  const style = options.style || "card";
   let wrapper = findWrapper(el);
   if (!wrapper) {
-    wrapper = makeWrapper();
+    wrapper = makeWrapper(style);
     attach(el, wrapper);
+  } else {
+    wrapper.classList.remove("obstr-style-card", "obstr-style-quote", "obstr-style-minimal");
+    wrapper.classList.add(`obstr-style-${style}`);
   }
   el.setAttribute(UNIT_ATTRIBUTE, options.state);
   wrapper.dataset.state = options.state;
@@ -98,8 +104,8 @@ function attach(el: HTMLElement, wrapper: HTMLElement): void {
   el.insertAdjacentElement("afterend", wrapper);
 }
 
-export function markPending(el: HTMLElement, render: Renderer): void {
-  inject(el, { state: "pending" }, render);
+export function markPending(el: HTMLElement, render: Renderer, style?: string): void {
+  inject(el, { state: "pending", style }, render);
 }
 
 /**

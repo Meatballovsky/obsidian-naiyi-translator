@@ -9,6 +9,7 @@ import { FloatingOrb } from "./ui/orb";
 import { clearInjected } from "./ui/inject";
 import { listModels, maxItemsPerBatch, translateTexts } from "./engines";
 import { TranslatorSettingTab } from "./settingsTab";
+import { t } from "./i18n";
 
 interface PersistedData {
   settings: TranslatorSettings;
@@ -76,13 +77,13 @@ export default class TranslatorOrbPlugin extends Plugin {
 
     this.addCommand({
       id: "toggle-page-translation",
-      name: "Toggle full-note translation",
+      name: t("cmdToggle"),
       callback: () => this.toggleTranslation(),
     });
 
     this.addCommand({
       id: "translate-selection",
-      name: "Translate selection",
+      name: t("cmdSelection"),
       callback: () => {
         void this.translateSelection();
       },
@@ -90,13 +91,13 @@ export default class TranslatorOrbPlugin extends Plugin {
 
     this.addCommand({
       id: "clear-translation",
-      name: "Clear injected translations",
+      name: t("cmdClear"),
       callback: () => this.clearTranslation(),
     });
 
     this.addCommand({
       id: "switch-engine",
-      name: "Cycle translation engine",
+      name: t("cmdCycle"),
       callback: () => void this.cycleEngine(),
     });
 
@@ -279,7 +280,7 @@ export default class TranslatorOrbPlugin extends Plugin {
     this.settings.engine = next;
     await this.saveSettings();
     this.orb?.applySettings(this.settings);
-    new Notice(`Translator engine: ${next}`, 2500);
+    new Notice(`${t("engineSwitched")}${next}`, 2500);
   }
 
   /** Used by the settings tab to prove an endpoint works before saving. */
