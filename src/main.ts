@@ -6,7 +6,7 @@ import { BatchQueue } from "./schedule/batch-queue";
 import { TranslationCache, type CachedEntry } from "./schedule/cache";
 import { Orchestrator } from "./orchestrator";
 import { FloatingOrb } from "./ui/orb";
-import { clearInjected } from "./ui/inject";
+import { clearInjected, refreshInjectedTypography } from "./ui/inject";
 import { listModels, maxItemsPerBatch, translateTexts } from "./engines";
 import { TranslatorSettingTab } from "./settingsTab";
 import { t } from "./i18n";
@@ -29,6 +29,7 @@ export default class TranslatorOrbPlugin extends Plugin {
   private orchestrator!: Orchestrator;
   private orb: FloatingOrb | null = null;
   private attachedLeaf: MarkdownView | null = null;
+  private attachedPath: string | null = null;
   private cacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   async onload(): Promise<void> {
@@ -82,14 +83,6 @@ export default class TranslatorOrbPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "translate-selection",
-      name: t("cmdSelection"),
-      callback: () => {
-        void this.translateSelection();
-      },
-    });
-
-    this.addCommand({
       id: "clear-translation",
       name: t("cmdClear"),
       callback: () => this.clearTranslation(),
@@ -111,6 +104,18 @@ export default class TranslatorOrbPlugin extends Plugin {
       this.app.workspace.on("layout-change", () => this.syncAttachment())
     );
     this.registerEvent(this.app.workspace.on("file-open", () => this.syncAttachment()));
+    const refreshTypography = () => {
+      for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+        if (!(leaf.view instanceof MarkdownView)) continue;
+        const root = this.previewRoot(leaf.view);
+        if (root) refreshInjectedTypography(root);
+      }
+    };
+    this.registerEvent(this.app.workspace.on("css-change", refreshTypography));
+    // Light/dark switching can update the body class without re-rendering notes.
+    const themeObserver = new MutationObserver(refreshTypography);
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    this.register(() => themeObserver.disconnect());
 
     // Toggling between Live Preview and reading view does not emit a workspace
     // event; Obsidian's setMode writes data-mode on the view container instead.
@@ -122,7 +127,6 @@ export default class TranslatorOrbPlugin extends Plugin {
     });
     this.register(() => modeObserver.disconnect());
 
-    this.registerSelectionTrigger();
   }
 
   onunload(): void {
@@ -198,21 +202,21 @@ export default class TranslatorOrbPlugin extends Plugin {
   private syncAttachment(): void {
     const view = this.activeReadingView();
 
-    if (this.attachedLeaf && this.attachedLeaf !== view) {
+    const path = view?.file?.path ?? null;
+    if (this.attachedLeaf && (this.attachedLeaf !== view || this.attachedPath !== path)) {
       this.orb?.destroy();
       this.orb = null;
       this.attachedLeaf = null;
-      this.orchestrator.stop();
+      this.orchestrator.clear();
     }
     if (!view) return;
 
     this.attachedLeaf = view;
+    this.attachedPath = path;
     if (!this.orb) {
       this.orb = new FloatingOrb(view.contentEl, this.settings, {
         onToggle: () => this.toggleTranslation(),
-        onTranslateSelection: () => void this.translateSelection(),
-        onStop: () => this.orchestrator.stop(),
-        onClear: () => this.clearTranslation(),
+        onPositionChange: () => { void this.saveSettings(); },
         isRunning: () => this.orchestrator.isRunning(),
       });
     }
@@ -251,27 +255,6 @@ export default class TranslatorOrbPlugin extends Plugin {
       const root = this.previewRoot(leaf.view as MarkdownView);
       if (root) clearInjected(root);
     }
-  }
-
-  /** Reads the toggle live so no re-registration is needed when settings change. */
-  private registerSelectionTrigger(): void {
-    this.registerDomEvent(document, "mouseup", () => {
-      if (!this.settings.autoTranslateOnSelect) return;
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed && selection.toString().trim().length > 0) {
-        void this.translateSelection();
-      }
-    });
-  }
-
-  private async translateSelection(): Promise<void> {
-    const view = this.activeReadingView();
-    if (!view) return;
-    // The orchestrator keeps the reading root from the last start(); selection
-    // translation works with or without a full-page session running.
-    const root = this.readingRoot(view);
-    if (root) this.orchestrator.attachRoot(root);
-    await this.orchestrator.translateSelection();
   }
 
   private async cycleEngine(): Promise<void> {

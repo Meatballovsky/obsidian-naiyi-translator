@@ -142,7 +142,7 @@
   box-shadow: var(--shadow-s);
   font-size: 15px;
   line-height: 1;
-  cursor: grab;
+  cursor: pointer;
   opacity: var(--obstr-orb-opacity);
   transition: opacity 120ms ease, transform 120ms ease, box-shadow 120ms ease;
   padding: 0;
@@ -152,7 +152,7 @@
 }
 
 .obstr-orb:hover .obstr-orb-ball,
-.obstr-orb.is-expanded .obstr-orb-ball {
+.obstr-orb-ball:focus-visible {
   opacity: 1;
   transform: scale(1.06);
 }
@@ -177,51 +177,6 @@
 .obstr-orb.is-running .obstr-orb-ball {
   border-color: var(--interactive-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 35%, transparent);
-}
-
-.obstr-orb-menu {
-  position: absolute;
-  right: calc(var(--obstr-orb-size) + 8px);
-  top: 50%;
-  transform: translateY(-50%) scale(0.96);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px;
-  border-radius: 10px;
-  border: 1px solid var(--background-modifier-border);
-  background: var(--background-primary-alt);
-  box-shadow: var(--shadow-m);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease, transform 120ms ease;
-  white-space: nowrap;
-}
-
-.obstr-orb.left-side .obstr-orb-menu {
-  right: auto;
-  left: calc(var(--obstr-orb-size) + 8px);
-}
-
-.obstr-orb.is-expanded .obstr-orb-menu {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(-50%) scale(1);
-}
-
-.obstr-orb-item {
-  border: none;
-  background: transparent;
-  color: var(--text-normal);
-  text-align: left;
-  padding: 6px 10px;
-  border-radius: 6px;
-  font-size: var(--font-ui-small);
-  cursor: pointer;
-}
-
-.obstr-orb-item:hover {
-  background: var(--background-modifier-hover);
 }
 
 /* Live Preview keeps its own layout; do not let wrappers stretch the line. */

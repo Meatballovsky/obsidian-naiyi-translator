@@ -29,6 +29,22 @@ function matchTypography(source: HTMLElement, wrapper: HTMLElement): void {
   ]) {
     wrapper.style.setProperty(property, computed.getPropertyValue(property));
   }
+  if (wrapper.dataset.state === "error") {
+    wrapper.style.removeProperty("color");
+    wrapper.style.removeProperty("font-size");
+  }
+}
+
+/** Refresh snapshots when the theme or its stylesheet changes, without translating again. */
+export function refreshInjectedTypography(root: HTMLElement): void {
+  for (const wrapper of root.querySelectorAll<HTMLElement>(`.${WRAPPER_CLASS}`)) {
+    const parent = wrapper.parentElement;
+    const source = parent && (parent.tagName === "TD" || parent.tagName === "TH")
+      ? parent : wrapper.previousElementSibling;
+    if (source instanceof HTMLElement && source.hasAttribute(UNIT_ATTRIBUTE)) {
+      matchTypography(source, wrapper);
+    }
+  }
 }
 
 /** Wrap inline runs, leaving Markdown blocks and formula DOM intact. */
@@ -113,11 +129,6 @@ export function inject(
   const body = wrapper.querySelector<HTMLElement>(`.${TEXT_CLASS}`);
   if (!body) return;
   matchTypography(el, wrapper);
-  if (options.state === "error") {
-    // Allow the error rules to override the source's normal text styling.
-    wrapper.style.removeProperty("color");
-    wrapper.style.removeProperty("font-size");
-  }
   const version = (renderVersions.get(body) ?? 0) + 1;
   renderVersions.set(body, version);
 

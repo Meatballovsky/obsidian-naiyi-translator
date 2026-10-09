@@ -41,7 +41,7 @@ export class Orchestrator {
   /**
    * Bumped on start/stop/clear. Results are gated on it, so work that lands after
    * the user stopped, cleared, or moved to another note can never paint — including
-   * one-shot selection translations that have no session to belong to.
+   * session initialization that is still awaiting the provider identity.
    */
   private epoch = 0;
   private watcher: ViewportWatcher | null = null;
@@ -68,6 +68,7 @@ export class Orchestrator {
   }
 
   async start(root: HTMLElement): Promise<void> {
+    this.stop();
     const settings = this.getSettings();
     this.root = root;
     this.epoch += 1;
@@ -75,10 +76,14 @@ export class Orchestrator {
     // to become eligible again rather than being remembered as pending forever.
     this.dropUnfinishedUnits();
     this.sessionId = `s${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
-    this.providerKey = await providerIdentity(settings);
+    const epoch = this.epoch;
+    this.units = new WeakMap();
     this.running = true;
-    this.done = 0;
     this.events.onRunningChange(true);
+    const providerKey = await providerIdentity(settings);
+    if (epoch !== this.epoch || !this.running) return;
+    this.providerKey = providerKey;
+    this.done = 0;
 
     this.watcher?.disconnect();
     this.watcher = new ViewportWatcher({
@@ -113,46 +118,13 @@ export class Orchestrator {
   /** Remove every injected node so the note reads exactly as Obsidian rendered it. */
   clear(): void {
     this.stop();
-    // Clearing must also strand a one-shot selection translation, which has no
-    // session and therefore no stop() to invalidate it.
+    // Invalidate any work still awaiting hashing or rendering.
     this.epoch += 1;
     if (this.root) clearInjected(this.root);
+    this.units = new WeakMap();
     this.done = 0;
     this.total = 0;
     this.events.onProgress(0, 0);
-  }
-
-  /**
-   * Selection translation can run without a full-page session, so the caller hands
-   * over the reading root before each one-shot request.
-   */
-  attachRoot(root: HTMLElement): void {
-    this.root = root;
-  }
-
-  /**
-   * Translate the blocks the current selection touches. Used by the orb's
-   * selection action and by the auto-translate-on-select setting.
-   */
-  async translateSelection(): Promise<void> {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
-    const root = this.root;
-    if (!root) return;
-
-    const ranges = Array.from({ length: selection.rangeCount }, (_, i) =>
-      selection.getRangeAt(i)
-    );
-    const targets = collectUnits(root).filter((unit) =>
-      ranges.some((range) => range.intersectsNode(unit.el))
-    );
-    if (targets.length === 0) return;
-
-    if (!this.providerKey) this.providerKey = await providerIdentity(this.getSettings());
-    for (const unit of targets) {
-      this.units.delete(unit.el);
-      await this.translateUnit(unit.el, true);
-    }
   }
 
   applySettings(): void {
@@ -190,7 +162,7 @@ export class Orchestrator {
     this.watcher.observe(fresh);
   }
 
-  private async translateUnit(el: HTMLElement, force = false): Promise<void> {
+  private async translateUnit(el: HTMLElement): Promise<void> {
     if (!el.isConnected) return;
     const settings = this.getSettings();
     const epoch = this.epoch;
@@ -198,7 +170,7 @@ export class Orchestrator {
     if (!text) return;
 
     const record = this.units.get(el);
-    if (record && record.status !== "pending" && !force) return;
+    if (record && record.status !== "pending") return;
 
     if (!meetsMinimum(text, settings.minCharactersPerNode, settings.minWordsPerNode)) {
       // Too small to be worth a request; leave the block untouched.
@@ -207,6 +179,7 @@ export class Orchestrator {
     }
 
     const key = await this.cacheKey(text);
+    if (epoch !== this.epoch || !this.running) return;
     const cached = settings.enableCache ? this.cache.get(key) : undefined;
     if (cached !== undefined) {
       if (epoch === this.epoch) this.paint(el, text, cached);

@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
+import { FloatingOrb } from "../src/ui/orb";
+import { Orchestrator } from "../src/orchestrator";
+import { DEFAULT_SETTINGS } from "../src/settings";
+import { TranslationCache } from "../src/schedule/cache";
+import { TranslateQueue } from "../src/schedule/queue";
+import { BatchQueue } from "../src/schedule/batch-queue";
+import { hashKey } from "../src/utils/hash";
 import { FROG_ORB_SVG } from "../src/ui/icons";
 import {
   collectUnits,
@@ -13,6 +20,7 @@ import {
   inject,
   isOwnInjection,
   markPending,
+  refreshInjectedTypography,
   unfinishedUnits,
 } from "../src/ui/inject";
 
@@ -400,6 +408,151 @@ async function main(): Promise<void> {
     assert.deepEqual(collectUnits(pane).map((unit) => unit.text), originalUnits);
     clearInjected(pane);
     pane.remove();
+  });
+
+  await test("theme refresh updates existing headings, quotes and cells without rendering again", () => {
+    const pane = document.createElement("div");
+    pane.innerHTML = '<h2>Heading</h2><blockquote><p>Quoted text.</p></blockquote><table><tbody><tr><td>Cell text.</td></tr></tbody></table><p>Error source.</p>';
+    document.body.appendChild(pane);
+    const sources = Array.from(pane.querySelectorAll<HTMLElement>("h2, blockquote p, td"));
+    let renders = 0;
+    for (const source of sources) {
+      source.style.color = "rgb(30, 30, 30)";
+      inject(source, { state: "done", translation: "译文", renderMarkdown: true }, (content) => {
+        renders++;
+        content.innerHTML = "<p><strong>译文</strong></p>";
+      });
+    }
+    const bodies = sources.map((source) =>
+      (source.tagName === "TD" ? source : source.nextElementSibling!).querySelector(".obstr-text")!
+    );
+    const originalMarkup = bodies.map((body) => body.innerHTML);
+    const errorSource = pane.lastElementChild as HTMLElement;
+    inject(errorSource, { state: "error", translation: "HTTP 429" }, () => {});
+    for (const color of ["rgb(220, 220, 220)", "rgb(30, 30, 30)"]) {
+      for (const source of sources) source.style.color = color;
+      refreshInjectedTypography(pane);
+      for (const body of bodies) assert.equal((body.parentElement as HTMLElement).style.color, color);
+      assert.deepEqual(bodies.map((body) => body.innerHTML), originalMarkup);
+      assert.equal((errorSource.nextElementSibling as HTMLElement).style.color, "");
+    }
+    assert.equal(renders, 3, "theme changes must not invoke the Markdown renderer");
+    clearInjected(pane);
+    pane.remove();
+  });
+
+  await test("orb is one native toggle button with reliable repeated and keyboard clicks", () => {
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    let enabled = false;
+    let clicks = 0;
+    const orb = new FloatingOrb(pane, { ...DEFAULT_SETTINGS }, {
+      onToggle: () => { enabled = !enabled; clicks++; }, isRunning: () => enabled,
+    });
+    const button = pane.querySelector("button")!;
+    assert.equal(pane.querySelectorAll("button").length, 1);
+    assert.equal(pane.querySelector(".obstr-orb-menu"), null);
+    for (let i = 1; i <= 6; i++) {
+      button.click(); // native/assistive click: no pointer events required
+      assert.equal(clicks, i);
+      assert.equal(button.getAttribute("aria-pressed"), String(i % 2 === 1));
+    }
+    assert.equal((pane.firstElementChild as HTMLElement).style.right, "12px");
+    orb.destroy(); pane.remove();
+  });
+
+  await test("dragging does not toggle, touch jitter does, and cancellation does not poison next tap", () => {
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    pane.getBoundingClientRect = () => ({ left: 100, top: 50, right: 500, bottom: 450, width: 400, height: 400 } as DOMRect);
+    const settings = { ...DEFAULT_SETTINGS };
+    let clicks = 0, saves = 0;
+    const orb = new FloatingOrb(pane, settings, {
+      onToggle: () => { clicks++; }, isRunning: () => false, onPositionChange: () => { saves++; },
+    });
+    const ball = pane.querySelector("button")!;
+    const root = pane.firstElementChild as HTMLElement;
+    root.getBoundingClientRect = () => {
+      const left = 100 + (parseFloat(root.style.left) || 0);
+      const top = 50 + (parseFloat(root.style.top) || 0);
+      return { left, top, right: left + 44, bottom: top + 44, width: 44, height: 44 } as DOMRect;
+    };
+    const pointer = (name: string, x: number, y: number) => {
+      const event = new window.Event(name, { bubbles: true });
+      Object.assign(event, { pointerId: 1, button: 0, isPrimary: true, pointerType: "touch", clientX: x, clientY: y });
+      ball.dispatchEvent(event);
+    };
+    const click = () => ball.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+    pointer("pointerdown", 110, 60); pointer("pointermove", 150, 100); pointer("pointerup", 150, 100); click();
+    assert.equal(clicks, 0);
+    assert.equal(saves, 1);
+    assert.equal(settings.orbCustomX, 12, "position must be relative to pane");
+    pointer("pointerdown", 110, 60); pointer("pointermove", 113, 63); pointer("pointerup", 113, 63); click();
+    assert.equal(clicks, 1);
+    pointer("pointerdown", 110, 60); pointer("pointercancel", 110, 60);
+    pointer("pointerdown", 110, 60); pointer("pointerup", 110, 60); click();
+    assert.equal(clicks, 2);
+    orb.destroy(); pane.remove();
+  });
+
+  await test("translation layer survives repeated off/on and delayed startup cannot revive it", async () => {
+    const watchers: FakeViewport[] = [];
+    class FakeViewport {
+      targets = new Set<Element>();
+      disconnected = false;
+      constructor(private callback: (entries: {target: Element; isIntersecting: boolean}[]) => void) { watchers.push(this); }
+      observe(el: Element) { this.targets.add(el); }
+      unobserve(el: Element) { this.targets.delete(el); }
+      disconnect() { this.disconnected = true; this.targets.clear(); }
+      enter(el: Element) { this.callback([{ target: el, isIntersecting: true }]); }
+    }
+    Object.assign(globalThis, { IntersectionObserver: FakeViewport, MutationObserver: window.MutationObserver });
+    const pane = document.createElement("div");
+    pane.innerHTML = "<p>First paragraph for reading.</p><p>Another paragraph below the viewport.</p>";
+    document.body.appendChild(pane);
+    const settings = { ...DEFAULT_SETTINGS, renderMarkdown: false };
+    const cache = new TranslationCache({ maxEntries: 20, ttlDays: 7 });
+    for (const source of pane.querySelectorAll("p")) {
+      cache.set(await hashKey(`${source.textContent}\u0000auto\u0000zh-CN\u0000google`), "译文");
+    }
+    const queue = new TranslateQueue({ capacity: 4, rate: 2, maxRetries: 0, baseRetryDelayMs: 1 });
+    const batch = new BatchQueue(queue, { maxItems: 4, maxChars: 1000, delayMs: 1 });
+    const session = new Orchestrator(queue, batch, cache, () => settings, (content, text) => { content.textContent = text; }, {
+      onRunningChange: () => {}, onProgress: () => {}, onCacheWrite: () => {},
+    });
+    const starting = session.start(pane);
+    assert.equal(session.isRunning(), true, "first click takes effect before provider hashing resolves");
+    session.clear();
+    await starting;
+    assert.equal(session.isRunning(), false);
+    assert.equal(watchers.length, 0, "cancelled initialization must not start observing");
+    for (let round = 0; round < 3; round++) {
+      await session.start(pane);
+      const watcher = watchers[watchers.length - 1];
+      assert.equal(watcher.targets.size, 2, "new session must observe previously translated blocks again");
+      const first = pane.querySelector("p")!;
+      watcher.enter(first);
+      for (let i = 0; i < 100 && !pane.querySelector('.obstr-wrapper[data-state="done"]'); i++) {
+        await new Promise((done) => setTimeout(done, 5));
+      }
+      assert.equal(pane.querySelectorAll(".obstr-wrapper").length, 1, "offscreen paragraphs remain deferred");
+      const second = Array.from(watcher.targets)[0];
+      watcher.enter(second);
+      for (let i = 0; i < 100 && pane.querySelectorAll('.obstr-wrapper[data-state="done"]').length !== 2; i++) {
+        await new Promise((done) => setTimeout(done, 5));
+      }
+      assert.equal(pane.querySelectorAll('.obstr-wrapper[data-state="done"]').length, 2);
+      session.clear();
+      assert.equal(pane.querySelectorAll(".obstr-wrapper").length, 0);
+      assert.equal(watcher.disconnected, true);
+    }
+    const firstStart = session.start(pane);
+    session.clear();
+    const nextStart = session.start(pane);
+    await Promise.all([firstStart, nextStart]);
+    assert.equal(session.isRunning(), true);
+    assert.equal(watchers.filter((watcher) => !watcher.disconnected).length, 1);
+    session.clear(); pane.remove();
   });
 
   console.log(results.join("\n"));

@@ -110,23 +110,18 @@ const STRINGS = {
     posRightMiddle: "右侧居中",
     posLeftMiddle: "左侧居中",
     posCustom: "自定义拖拽位置",
-    autoTranslateSelect: "划选自动翻译",
-    autoTranslateSelectDesc: "在阅读视图中选中段落即自动触发翻译",
 
     // Markdown
     mdHeading: "Markdown 语法",
     renderMd: "以 Markdown 格式渲染译文",
     renderMdDesc: "保留译文中的加粗、行内代码、链接等排版格式",
 
-    // Orb Menu Actions
-    orbToggle: "全文双语翻译",
-    orbSelection: "仅译选中段落",
-    orbStop: "停止翻译",
-    orbClear: "清除所有译文",
+    // Orb toggle labels
+    orbEnable: "开启翻译层",
+    orbDisable: "关闭翻译层",
 
     // Commands
     cmdToggle: "全文双语对照翻译",
-    cmdSelection: "仅翻译选中段落",
     cmdClear: "清除所有注入译文",
     cmdCycle: "快速轮换翻译引擎",
     engineSwitched: "当前翻译引擎已切换为：",
@@ -219,23 +214,18 @@ const STRINGS = {
     posRightMiddle: "右側居中",
     posLeftMiddle: "左側居中",
     posCustom: "自定義拖拽位置",
-    autoTranslateSelect: "劃選自動翻譯",
-    autoTranslateSelectDesc: "在閱讀視圖中選中段落即自動觸發翻譯",
 
     // Markdown
     mdHeading: "Markdown 語法",
     renderMd: "以 Markdown 格式渲染譯文",
     renderMdDesc: "保留譯文中的加粗、行內代碼、鏈接等排版格式",
 
-    // Orb Menu Actions
-    orbToggle: "全文雙語翻譯",
-    orbSelection: "僅譯選中段落",
-    orbStop: "停止翻譯",
-    orbClear: "清除所有譯文",
+    // Orb toggle labels
+    orbEnable: "開啟翻譯層",
+    orbDisable: "關閉翻譯層",
 
     // Commands
     cmdToggle: "全文雙語對照翻譯",
-    cmdSelection: "僅翻譯選中段落",
     cmdClear: "清除所有注入譯文",
     cmdCycle: "快速輪換翻譯引擎",
     engineSwitched: "當前翻譯引擎已切換為：",
@@ -328,23 +318,18 @@ const STRINGS = {
     posRightMiddle: "Right middle",
     posLeftMiddle: "Left middle",
     posCustom: "Custom (draggable)",
-    autoTranslateSelect: "Auto-translate on selection",
-    autoTranslateSelectDesc: "Translates selections without opening the orb menu",
 
     // Markdown
     mdHeading: "Markdown",
     renderMd: "Render translation as Markdown",
     renderMdDesc: "Preserves bold, code, links, etc. in translated text",
 
-    // Orb Menu Actions
-    orbToggle: "Translate full note",
-    orbSelection: "Translate selection",
-    orbStop: "Stop",
-    orbClear: "Clear translations",
+    // Orb toggle labels
+    orbEnable: "Show translations",
+    orbDisable: "Hide translations",
 
     // Commands
     cmdToggle: "Toggle full-note translation",
-    cmdSelection: "Translate selection",
     cmdClear: "Clear injected translations",
     cmdCycle: "Cycle translation engine",
     engineSwitched: "Switched translation engine to: ",

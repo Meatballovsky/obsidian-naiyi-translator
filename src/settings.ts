@@ -50,7 +50,6 @@ export interface TranslatorSettings {
   orbPosition: OrbPosition;
   orbCustomX: number | null;
   orbCustomY: number | null;
-  autoTranslateOnSelect: boolean;
 
   /** Render translation as Markdown (AI engines return formatted output). */
   renderMarkdown: boolean;
@@ -96,7 +95,6 @@ export const DEFAULT_SETTINGS: TranslatorSettings = {
   orbPosition: "right-middle",
   orbCustomX: null,
   orbCustomY: null,
-  autoTranslateOnSelect: false,
 
   renderMarkdown: true,
   ai: {

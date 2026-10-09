@@ -409,16 +409,6 @@ export class TranslatorSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
-      .setName(t("autoTranslateSelect"))
-      .setDesc(t("autoTranslateSelectDesc"))
-      .addToggle((toggle) =>
-        toggle.setValue(settings.autoTranslateOnSelect).onChange(async (value) => {
-          settings.autoTranslateOnSelect = value;
-          commit();
-        })
-      );
-
     // Cache Section
     new Setting(containerEl).setName(t("cacheHeading")).setHeading();
 
