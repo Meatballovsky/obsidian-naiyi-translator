@@ -1,0 +1,162 @@
+.obstr-wrapper {
+  --obstr-gap: 0.35em;
+  margin: var(--obstr-gap) 0 0.75em 0;
+  padding-left: 0.75em;
+  border-left: 2px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 0.95em;
+  line-height: var(--line-height-normal);
+}
+
+.obstr-wrapper[data-state="pending"] .obstr-text {
+  min-height: 1em;
+}
+
+.obstr-wrapper[data-state="error"] {
+  border-left-color: var(--color-red);
+  color: var(--color-red);
+  font-size: 0.85em;
+}
+
+.obstr-wrapper .obstr-text > :first-child {
+  margin-top: 0;
+}
+
+.obstr-wrapper .obstr-text > :last-child {
+  margin-bottom: 0;
+}
+
+/* Keep injected nodes out of the copy and print path of the original note. */
+.obstr-wrapper:not(.is-keep) {
+  user-select: none;
+}
+
+.obstr-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--background-modifier-hover) 0%,
+    var(--background-modifier-border) 50%,
+    var(--background-modifier-hover) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: obstr-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes obstr-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media print {
+  .obstr-wrapper {
+    display: none;
+  }
+}
+
+/* ---------- floating orb ---------- */
+
+.obstr-orb {
+  --obstr-orb-size: 44px;
+  --obstr-orb-opacity: 0.35;
+  position: absolute;
+  z-index: var(--layer-popover, 30);
+  width: var(--obstr-orb-size);
+  height: var(--obstr-orb-size);
+  touch-action: none;
+}
+
+.obstr-orb.is-hidden,
+.obstr-orb.is-offscreen {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.obstr-orb-ball {
+  width: var(--obstr-orb-size);
+  height: var(--obstr-orb-size);
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: var(--shadow-s);
+  font-size: 15px;
+  line-height: 1;
+  cursor: grab;
+  opacity: var(--obstr-orb-opacity);
+  transition: opacity 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.obstr-orb:hover .obstr-orb-ball,
+.obstr-orb.is-expanded .obstr-orb-ball {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.obstr-orb-ball:active {
+  cursor: grabbing;
+  transform: scale(0.96);
+}
+
+.obstr-orb.is-running .obstr-orb-ball {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 35%, transparent);
+}
+
+.obstr-orb-menu {
+  position: absolute;
+  right: calc(var(--obstr-orb-size) + 8px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.96);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary-alt);
+  box-shadow: var(--shadow-m);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+
+.obstr-orb.left-side .obstr-orb-menu {
+  right: auto;
+  left: calc(var(--obstr-orb-size) + 8px);
+}
+
+.obstr-orb.is-expanded .obstr-orb-menu {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) scale(1);
+}
+
+.obstr-orb-item {
+  border: none;
+  background: transparent;
+  color: var(--text-normal);
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.obstr-orb-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* Live Preview keeps its own layout; do not let wrappers stretch the line. */
+.markdown-source-view .obstr-wrapper {
+  display: none;
+}
