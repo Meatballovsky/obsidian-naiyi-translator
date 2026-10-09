@@ -22,6 +22,27 @@
 
 ---
 
+## English overview
+
+Naiyi Translate adds translations beneath the original text in Reading View without changing your Markdown files. A single frog button toggles the translation layer. Translations load as you scroll; switching notes turns the layer off. Supports Google, Microsoft Edge, and OpenAI-compatible cloud or local models.
+
+### Installation
+
+Requires Obsidian 1.8.7 or later. While community-directory review is pending, install with **BRAT** by adding `Meatballovsky/obsidian-naiyi-translator`, then enable **Naiyi Translate** under Community plugins.
+
+For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/Meatballovsky/obsidian-naiyi-translator/releases/latest). Copy them into `<vault>/.obsidian/plugins/naiyi-translate/`, reload the app, and enable the plugin under Community plugins.
+
+### Usage
+
+1. Open the plugin settings and choose a translation engine and target language. For an OpenAI-compatible engine, configure its endpoint, model, and API key when required.
+2. Open an English or other foreign-language note in **Reading View**.
+3. Click or tap the frog button once to enable translations, then scroll to translate further paragraphs.
+4. Click it again to remove translations and cancel pending work. The command palette also provides **Toggle translation layer**.
+
+The frog has no secondary menu or selection-translation action. Notes remain unchanged on disk. Online engines send text to their providers; a locally hosted model keeps translation requests on your own machine.
+
+---
+
 ## 缘起：从「陪读蛙」到「奈译屋」
 
 本项目的底层思路与设计灵感源自 Chrome 上优秀的沉浸式翻译插件 [read-frog (陪读蛙)](https://github.com/mengxi-ream/read-frog)。

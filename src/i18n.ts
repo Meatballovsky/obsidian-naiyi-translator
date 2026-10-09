@@ -1,14 +1,10 @@
+import { getLanguage as getAppLanguage } from "obsidian";
+
 export type LangCode = "zh" | "zh-tw" | "en";
 
 export function getLanguage(): LangCode {
   try {
-    const raw = (
-      (typeof window !== "undefined" && window.localStorage?.getItem("language")) ||
-      // @ts-ignore
-      (typeof moment !== "undefined" && typeof moment.locale === "function" ? moment.locale() : "") ||
-      (typeof navigator !== "undefined" && navigator.language) ||
-      "en"
-    ).toLowerCase();
+    const raw = getAppLanguage().toLowerCase();
 
     if (raw.includes("tw") || raw.includes("hk") || raw.includes("hant")) {
       return "zh-tw";

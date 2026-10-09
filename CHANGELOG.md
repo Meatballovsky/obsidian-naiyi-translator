@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Addressed community review errors: removed redundant manifest wording, gave each Markdown translation its own disposable render component, sanitized embedded SVGs, used native settings headings, and replaced direct orb style assignments with DOM helpers.
+- Use the app's language API and window timers; replaced the build dependency on builtin-modules with Node's builtinModules.
+- Require Obsidian 1.8.7 for the app-language API. Removed newer slider calls and retained the imperative settings UI for versions before 1.13.
+- Added English installation and usage instructions while preserving the original Chinese introduction.
+
 ## 0.1.4
 
 - Simplified the floating frog to one translation-layer toggle. Click or tap once to enable scroll-loaded translations; click again to cancel pending work and remove translations.

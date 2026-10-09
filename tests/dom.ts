@@ -68,10 +68,27 @@ const dom = new JSDOM(`<body>${FIXTURE}</body>`);
 const { window } = dom;
 // The chunker and injector touch the DOM directly, so the test document is global.
 Object.assign(globalThis, {
+  window,
   document: window.document,
   HTMLElement: window.HTMLElement,
   Node: window.Node,
   getComputedStyle: window.getComputedStyle.bind(window),
+});
+
+// Minimal implementations of Obsidian's DOM helpers, scoped to this test window.
+Object.assign(window.HTMLElement.prototype, {
+  createEl(this: HTMLElement, tag: string) {
+    const child = this.ownerDocument.createElement(tag);
+    this.append(child);
+    return child;
+  },
+  createDiv(this: HTMLElement) { return this.createEl("div"); },
+  createSpan(this: HTMLElement) { return this.createEl("span"); },
+  setCssStyles(this: HTMLElement, styles: Partial<CSSStyleDeclaration>) { Object.assign(this.style, styles); },
+  setCssProps(this: HTMLElement, props: Record<string, string>) {
+    for (const [name, value] of Object.entries(props)) this.style.setProperty(name, value);
+  },
+  detach(this: HTMLElement) { this.remove(); },
 });
 
 const root = window.document.querySelector<HTMLElement>(".markdown-preview-view")!;
@@ -80,6 +97,53 @@ const ORIGINAL_NODE_COUNT = root.querySelectorAll("*").length;
 const texts = () => collectUnits(root).map((unit) => unit.text);
 
 async function main(): Promise<void> {
+  await test("Markdown components release on replacement, clearing and external preview removal", async () => {
+    const pane = document.createElement("div");
+    document.body.append(pane);
+    const source = pane.createEl("p");
+    source.textContent = "Original paragraph";
+    let released = 0;
+    const renderer = (el: HTMLElement, text: string, component: import("obsidian").Component) => {
+      component.register(() => released++);
+      el.textContent = text;
+    };
+    const options = { state: "done" as const, translation: "Translation", renderMarkdown: true };
+    inject(source, options, renderer);
+    assert.equal(released, 0);
+    inject(source, options, renderer);
+    assert.equal(released, 1, "re-render releases previous Markdown resources");
+    markPending(source, renderer);
+    assert.equal(released, 2, "placeholder releases rendered resources");
+    inject(source, options, renderer);
+    clearInjected(pane);
+    assert.equal(released, 3, "clear releases immediately");
+    inject(source, options, renderer);
+    pane.remove();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    assert.equal(released, 4, "external preview removal releases resources");
+  });
+
+  await test("clearing an unfinished Markdown render releases resources and prevents late output", async () => {
+    const pane = document.createElement("div");
+    document.body.append(pane);
+    const source = pane.createEl("p");
+    source.textContent = "Original";
+    let resolveRender!: () => void;
+    let released = false;
+    inject(source, { state: "done", translation: "Late", renderMarkdown: true }, (el, text, component) => {
+      component.register(() => { released = true; });
+      el.textContent = text;
+      return new Promise<void>((resolve) => { resolveRender = resolve; });
+    });
+    clearInjected(pane);
+    assert.ok(released);
+    resolveRender();
+    await Promise.resolve();
+    assert.equal(pane.textContent, "Original");
+    assert.equal(pane.querySelector(`.${WRAPPER_CLASS}`), null);
+    pane.remove();
+  });
+
   await test("collects prose blocks in reading order", () => {
     assert.deepEqual(texts(), [
       "Translating Papers",

@@ -1,8 +1,8 @@
 {
   "name": "naiyi-translate",
   "private": true,
-  "version": "0.1.4",
-  "description": "A minimal and rapid translation assistant for seamless reading in Obsidian. (助你谈笑阅览外文文献的极简翻译助手)",
+  "version": "0.1.5",
+  "description": "Inline bilingual reading with scroll-loaded translations and Google, Microsoft, or OpenAI-compatible engines.",
   "type": "module",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -15,7 +15,6 @@
   "devDependencies": {
     "@types/jsdom": "^30.0.0",
     "@types/node": "^22.10.2",
-    "builtin-modules": "^3.3.0",
     "esbuild": "^0.24.2",
     "jsdom": "^30.1.2",
     "obsidian": "^1.7.2",

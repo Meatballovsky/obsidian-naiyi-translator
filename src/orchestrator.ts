@@ -51,7 +51,7 @@ export class Orchestrator {
   private running = false;
   private total = 0;
   private done = 0;
-  private rebindTimer: ReturnType<typeof setTimeout> | null = null;
+  private rebindTimer: number | null = null;
   private rerenderObserver: MutationObserver | null = null;
 
   constructor(
@@ -262,8 +262,8 @@ export class Orchestrator {
       // Injecting a translation mutates this same subtree; reacting to our own
       // nodes would make every painted paragraph trigger another scan.
       if (records.every(isOwnInjection)) return;
-      if (this.rebindTimer !== null) clearTimeout(this.rebindTimer);
-      this.rebindTimer = setTimeout(() => this.collectAndObserve(), 120);
+      if (this.rebindTimer !== null) window.clearTimeout(this.rebindTimer);
+      this.rebindTimer = window.setTimeout(() => this.collectAndObserve(), 120);
     });
     this.rerenderObserver.observe(root, { childList: true, subtree: true });
   }
@@ -281,7 +281,7 @@ export class Orchestrator {
     this.rerenderObserver?.disconnect();
     this.rerenderObserver = null;
     if (this.rebindTimer !== null) {
-      clearTimeout(this.rebindTimer);
+      window.clearTimeout(this.rebindTimer);
       this.rebindTimer = null;
     }
   }

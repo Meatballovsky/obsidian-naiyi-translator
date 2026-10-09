@@ -55,7 +55,7 @@ export class TranslateQueue {
   private executingByHash = new Map<string, QueueTask<unknown>>();
   private pausedUntil = 0;
   private consecutiveRateLimits = 0;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: number | null = null;
   private options: QueueOptions;
   private retryPolicy: RequestRetryPolicy;
 
@@ -294,12 +294,12 @@ export class TranslateQueue {
 
   private armTimer(ms: number): void {
     this.clearTimer();
-    this.timer = setTimeout(() => this.schedule(), Math.max(0, ms));
+    this.timer = window.setTimeout(() => this.schedule(), Math.max(0, ms));
   }
 
   private clearTimer(): void {
     if (this.timer !== null) {
-      clearTimeout(this.timer);
+      window.clearTimeout(this.timer);
       this.timer = null;
     }
   }

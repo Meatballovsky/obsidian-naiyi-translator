@@ -10,7 +10,7 @@ const BATCH_MAP_RETRIES = 2;
 const BATCH_RETRY_BASE_MS = 400;
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 /**

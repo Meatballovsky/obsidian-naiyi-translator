@@ -22,14 +22,14 @@ class TimeoutError extends Error {
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs?: number): Promise<T> {
   if (!timeoutMs || timeoutMs <= 0) return promise;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new TimeoutError()), timeoutMs);
+    timer = window.setTimeout(() => reject(new TimeoutError()), timeoutMs);
   });
   // The underlying request keeps running but its result is discarded; callers
   // gate on a session version so a late response can never paint.
   return Promise.race([promise, timeout]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
+    if (timer !== undefined) window.clearTimeout(timer);
   });
 }
 

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+// Scheduling uses the host window; Node provides equivalent timer primitives.
+Object.assign(globalThis, { window: { setTimeout, clearTimeout } });
 import { TranslateQueue, isCancelled, type QueueOptions, type QueueTask } from "../src/schedule/queue";
 import { BatchQueue } from "../src/schedule/batch-queue";
 import { TranslationCache } from "../src/schedule/cache";

@@ -22,7 +22,7 @@ interface Group {
   scope: string;
   items: Pending[];
   chars: number;
-  timer: ReturnType<typeof setTimeout> | null;
+  timer: number | null;
 }
 
 let seq = 0;
@@ -87,9 +87,9 @@ export class BatchQueue {
           ? Math.min(freeAt - Date.now(), this.options.saturatedHoldMs)
           : this.options.delayMs;
 
-      if (group.timer !== null) clearTimeout(group.timer);
+      if (group.timer !== null) window.clearTimeout(group.timer);
       const captured = group;
-      group.timer = setTimeout(
+      group.timer = window.setTimeout(
         () => this.flush(captured, run),
         Math.max(0, holdMs)
       );
@@ -104,7 +104,7 @@ export class BatchQueue {
   dropScope(scope: string): void {
     for (const group of Array.from(this.groups.values())) {
       if (group.scope !== scope) continue;
-      if (group.timer !== null) clearTimeout(group.timer);
+      if (group.timer !== null) window.clearTimeout(group.timer);
       group.timer = null;
       if (this.groups.get(group.id) === group) this.groups.delete(group.id);
       const items = group.items;
@@ -126,7 +126,7 @@ export class BatchQueue {
     group: Group,
     run: (texts: string[]) => Promise<string[]>
   ): void {
-    if (group.timer !== null) clearTimeout(group.timer);
+    if (group.timer !== null) window.clearTimeout(group.timer);
     group.timer = null;
     if (this.groups.get(group.id) === group) this.groups.delete(group.id);
     if (group.items.length === 0) return;

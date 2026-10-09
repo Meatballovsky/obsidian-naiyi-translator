@@ -6,7 +6,7 @@ import { BatchQueue } from "./schedule/batch-queue";
 import { TranslationCache, type CachedEntry } from "./schedule/cache";
 import { Orchestrator } from "./orchestrator";
 import { FloatingOrb } from "./ui/orb";
-import { clearInjected, refreshInjectedTypography } from "./ui/inject";
+import { clearInjected, disposeRenderScopes, refreshInjectedTypography } from "./ui/inject";
 import { listModels, maxItemsPerBatch, translateTexts } from "./engines";
 import { TranslatorSettingTab } from "./settingsTab";
 import { t } from "./i18n";
@@ -30,10 +30,11 @@ export default class TranslatorOrbPlugin extends Plugin {
   private orb: FloatingOrb | null = null;
   private attachedLeaf: MarkdownView | null = null;
   private attachedPath: string | null = null;
-  private cacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private cacheSaveTimer: number | null = null;
 
   async onload(): Promise<void> {
     await this.loadSettings();
+    this.register(disposeRenderScopes);
 
     this.queue = new TranslateQueue({
       capacity: this.settings.requestCapacity,
@@ -63,9 +64,9 @@ export default class TranslatorOrbPlugin extends Plugin {
       this.batch,
       this.cache,
       () => this.settings,
-      (el, markdown) => {
+      (el, markdown, component) => {
         const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";
-        return MarkdownRenderer.render(this.app, markdown, el, sourcePath, this);
+        return MarkdownRenderer.render(this.app, markdown, el, sourcePath, component);
       },
       {
         onRunningChange: () => this.orb?.syncRunningState(),
@@ -136,7 +137,7 @@ export default class TranslatorOrbPlugin extends Plugin {
     // Obsidian keeps the rendered panes alive, so injected nodes must not outlive
     // the plugin.
     this.clearEverywhere();
-    if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
+    if (this.cacheSaveTimer !== null) window.clearTimeout(this.cacheSaveTimer);
   }
 
   async loadSettings(): Promise<void> {
@@ -167,8 +168,8 @@ export default class TranslatorOrbPlugin extends Plugin {
   /** Cache writes are hot-path work; keep them off the translation critical path. */
   private scheduleCacheSave(): void {
     if (!this.settings.enableCache) return;
-    if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
-    this.cacheSaveTimer = setTimeout(() => {
+    if (this.cacheSaveTimer !== null) window.clearTimeout(this.cacheSaveTimer);
+    this.cacheSaveTimer = window.setTimeout(() => {
       this.cacheSaveTimer = null;
       void this.persist();
     }, CACHE_SAVE_DEBOUNCE_MS);

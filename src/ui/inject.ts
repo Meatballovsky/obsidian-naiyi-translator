@@ -1,3 +1,4 @@
+import { Component } from "obsidian";
 import {
   TEXT_CLASS,
   UNIT_ATTRIBUTE,
@@ -15,9 +16,52 @@ export interface InjectOptions {
   style?: string;
 }
 
-export type Renderer = (container: HTMLElement, markdown: string) => void | Promise<void>;
+export type Renderer = (container: HTMLElement, markdown: string, component: Component) => void | Promise<void>;
 
 const renderVersions = new WeakMap<HTMLElement, number>();
+const renderScopes = new Map<HTMLElement, Component>();
+const removalObservers = new Map<Document, MutationObserver>();
+
+/** Plugin unload must release even a render whose preview was just detached. */
+export function disposeRenderScopes(): void {
+  for (const body of renderScopes.keys()) releaseRender(body);
+}
+
+function releaseRender(body: HTMLElement): void {
+  renderVersions.set(body, (renderVersions.get(body) ?? 0) + 1);
+  renderScopes.get(body)?.unload();
+  renderScopes.delete(body);
+  const doc = body.ownerDocument;
+  if (![...renderScopes.keys()].some((el) => el.ownerDocument === doc)) {
+    removalObservers.get(doc)?.disconnect();
+    removalObservers.delete(doc);
+  }
+}
+
+function createRenderScope(body: HTMLElement): Component {
+  const component = new Component();
+  component.load();
+  renderScopes.set(body, component);
+  const doc = body.ownerDocument;
+  if (!removalObservers.has(doc)) {
+    const Observer = doc.defaultView!.MutationObserver;
+    const observer = new Observer(() => {
+      // Also release renders when Obsidian replaces a preview outside our clear path.
+      for (const el of renderScopes.keys()) {
+        if (el.ownerDocument === doc && !el.isConnected) releaseRender(el);
+      }
+    });
+    observer.observe(doc.body, { childList: true, subtree: true });
+    removalObservers.set(doc, observer);
+  }
+  return component;
+}
+
+function removeWrapper(wrapper: Element): void {
+  const body = wrapper.querySelector<HTMLElement>(`.${TEXT_CLASS}`);
+  if (body) releaseRender(body);
+  wrapper.remove();
+}
 
 /** Sibling wrappers cannot inherit styles applied directly to the source block. */
 function matchTypography(source: HTMLElement, wrapper: HTMLElement): void {
@@ -60,7 +104,7 @@ function shadeText(container: HTMLElement): void {
         && (node as HTMLElement).tagName !== "BR"
     );
     if (hasContent) {
-      const shade = container.ownerDocument.createElement("span");
+      const shade = container.createSpan();
       shade.className = "obstr-shaded-text";
       container.insertBefore(shade, run[0]);
       shade.append(...run);
@@ -78,10 +122,11 @@ function shadeText(container: HTMLElement): void {
   flush();
 }
 
-function makeWrapper(style: string = "card"): HTMLElement {
-  const wrapper = document.createElement("div");
+function makeWrapper(el: HTMLElement, style: string = "card"): HTMLElement {
+  const wrapper = el.createDiv();
+  wrapper.detach();
   wrapper.className = `${WRAPPER_CLASS} obstr-style-${style} notranslate`;
-  const body = document.createElement("div");
+  const body = wrapper.createDiv();
   body.className = TEXT_CLASS;
   wrapper.appendChild(body);
   return wrapper;
@@ -117,7 +162,7 @@ export function inject(
   const style = options.style || "card";
   let wrapper = findWrapper(el);
   if (!wrapper) {
-    wrapper = makeWrapper(style);
+    wrapper = makeWrapper(el, style);
     attach(el, wrapper);
   } else {
     wrapper.classList.remove("obstr-style-card", "obstr-style-quote", "obstr-style-minimal");
@@ -128,6 +173,7 @@ export function inject(
 
   const body = wrapper.querySelector<HTMLElement>(`.${TEXT_CLASS}`);
   if (!body) return;
+  releaseRender(body);
   matchTypography(el, wrapper);
   const version = (renderVersions.get(body) ?? 0) + 1;
   renderVersions.set(body, version);
@@ -146,23 +192,32 @@ export function inject(
   }
   if (options.state === "skipped" || !text.trim()) {
     // A unit that turns out to need no translation leaves no placeholder behind.
-    wrapper.remove();
+    removeWrapper(wrapper);
     el.removeAttribute(UNIT_ATTRIBUTE);
     return;
   }
 
   body.textContent = "";
   // Render off-DOM so a late Markdown render cannot overwrite a newer state.
-  const content = el.ownerDocument.createElement("div");
+  const content = body.createDiv();
+  content.detach();
   const finish = () => {
     if (renderVersions.get(body) !== version) return;
     if (style === "card") shadeText(content);
     body.replaceChildren(...Array.from(content.childNodes));
   };
   if (options.renderMarkdown) {
-    const result = render(content, text);
-    if (result) void result.then(finish);
-    else finish();
+    const component = createRenderScope(body);
+    try {
+      const result = render(content, text, component);
+      if (result) void result.then(finish).catch(() => {
+        if (renderScopes.get(body) === component) releaseRender(body);
+      });
+      else finish();
+    } catch (error) {
+      releaseRender(body);
+      throw error;
+    }
   } else {
     content.textContent = text;
     finish();
@@ -199,13 +254,14 @@ export function unfinishedUnits(root: HTMLElement): HTMLElement[] {
 export function dropUnit(el: HTMLElement): void {
   // A block's wrapper is its next sibling; a table cell hosts one inside itself.
   const sibling = el.nextElementSibling;
-  if (sibling?.classList.contains(WRAPPER_CLASS)) sibling.remove();
-  el.querySelector<HTMLElement>(`:scope > .${WRAPPER_CLASS}`)?.remove();
+  if (sibling?.classList.contains(WRAPPER_CLASS)) removeWrapper(sibling);
+  const child = el.querySelector<HTMLElement>(`:scope > .${WRAPPER_CLASS}`);
+  if (child) removeWrapper(child);
   el.removeAttribute(UNIT_ATTRIBUTE);
 }
 
 export function clearInjected(root: HTMLElement): void {
-  root.querySelectorAll(`.${WRAPPER_CLASS}`).forEach((node) => node.remove());
+  root.querySelectorAll(`.${WRAPPER_CLASS}`).forEach(removeWrapper);
   root.querySelectorAll(`[${UNIT_ATTRIBUTE}]`).forEach((node) => node.removeAttribute(UNIT_ATTRIBUTE));
 }
 

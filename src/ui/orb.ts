@@ -1,3 +1,4 @@
+import { sanitizeHTMLToDom } from "obsidian";
 import type { TranslatorSettings } from "../settings";
 import { FROG_ORB_SVG } from "./icons";
 import { t } from "../i18n";
@@ -28,13 +29,13 @@ export class FloatingOrb {
     private settings: TranslatorSettings,
     private actions: OrbActions
   ) {
-    this.root = document.createElement("div");
+    this.root = this.container.createDiv();
     this.root.className = "obstr-orb";
-    this.ball = document.createElement("button");
+    this.ball = this.root.createEl("button");
     this.ball.type = "button";
     this.ball.className = "obstr-orb-ball";
     this.ball.setAttribute("aria-label", t("pluginTitle"));
-    this.ball.innerHTML = FROG_ORB_SVG;
+    this.ball.append(sanitizeHTMLToDom(FROG_ORB_SVG));
 
     this.root.append(this.ball);
     this.container.appendChild(this.root);
@@ -118,9 +119,7 @@ export class FloatingOrb {
       Math.max(0, top - bounds.top),
       Math.max(0, bounds.height - SIZE)
     );
-    this.root.style.left = `${clampedX}px`;
-    this.root.style.top = `${clampedY}px`;
-    this.root.style.right = "auto";
+    this.root.setCssStyles({ left: `${clampedX}px`, top: `${clampedY}px`, right: "auto" });
   }
 
   private snapToEdge(): void {
@@ -140,7 +139,7 @@ export class FloatingOrb {
 
   applySettings(settings: TranslatorSettings): void {
     this.settings = settings;
-    this.root.style.setProperty("--obstr-orb-opacity", String(settings.orbOpacity));
+    this.root.setCssProps({ "--obstr-orb-opacity": String(settings.orbOpacity) });
     this.root.classList.toggle("is-hidden", !settings.showOrb);
     this.syncRunningState();
 
@@ -150,9 +149,11 @@ export class FloatingOrb {
       return;
     }
     const dockLeft = settings.orbPosition === "left-middle";
-    this.root.style.left = dockLeft ? `${DOCK_EDGE_GAP}px` : "auto";
-    this.root.style.right = dockLeft ? "auto" : `${DOCK_EDGE_GAP}px`;
-    this.root.style.top = `calc(50% - ${SIZE / 2}px)`;
+    this.root.setCssStyles({
+      left: dockLeft ? `${DOCK_EDGE_GAP}px` : "auto",
+      right: dockLeft ? "auto" : `${DOCK_EDGE_GAP}px`,
+      top: `calc(50% - ${SIZE / 2}px)`,
+    });
   }
 
   syncRunningState(): void {

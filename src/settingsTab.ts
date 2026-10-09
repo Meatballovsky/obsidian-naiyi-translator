@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, sanitizeHTMLToDom, Notice, PluginSettingTab, Setting } from "obsidian";
 
 import type { EngineId, OrbPosition, TranslationStyle } from "./settings";
 import type TranslatorOrbPlugin from "./main";
@@ -35,7 +35,7 @@ const ORB_POSITIONS: [OrbPosition, TranslationKey][] = [
 ];
 
 export class TranslatorSettingTab extends PluginSettingTab {
-  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveTimer: number | null = null;
 
   constructor(app: App, private plugin: TranslatorOrbPlugin) {
     super(app, plugin);
@@ -43,8 +43,8 @@ export class TranslatorSettingTab extends PluginSettingTab {
 
   /** Text fields fire per keystroke; coalesce them into one data.json write. */
   private debouncedSave(): void {
-    if (this.saveTimer !== null) clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
+    if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
       void this.plugin.saveSettings();
     }, 400);
@@ -52,7 +52,7 @@ export class TranslatorSettingTab extends PluginSettingTab {
 
   hide(): void {
     if (this.saveTimer !== null) {
-      clearTimeout(this.saveTimer);
+      window.clearTimeout(this.saveTimer);
       this.saveTimer = null;
       void this.plugin.saveSettings();
     }
@@ -67,10 +67,10 @@ export class TranslatorSettingTab extends PluginSettingTab {
     // Hero Banner with Flat Logo
     const heroEl = containerEl.createDiv({ cls: "obstr-settings-hero" });
     const logoEl = heroEl.createDiv({ cls: "obstr-settings-hero-logo" });
-    logoEl.innerHTML = FULL_LOGO_SVG;
+    logoEl.append(sanitizeHTMLToDom(FULL_LOGO_SVG));
 
     const textEl = heroEl.createDiv({ cls: "obstr-settings-hero-text" });
-    textEl.createEl("h3", { text: t("pluginTitle"), cls: "obstr-settings-hero-title" });
+    new Setting(textEl).setName(t("pluginTitle")).setHeading().settingEl.addClass("obstr-settings-hero-title");
     textEl.createEl("p", { text: t("pluginSubtitle"), cls: "obstr-settings-hero-subtitle" });
 
     const commit = () => this.debouncedSave();
@@ -245,8 +245,7 @@ export class TranslatorSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("aiTemperature"))
       .addSlider((slider) => {
-        slider.setLimits(0, 1, 0.05).setValue(settings.ai.temperature).setDynamicTooltip();
-        slider.setInstant(false);
+        slider.setLimits(0, 1, 0.05).setValue(settings.ai.temperature);
         slider.onChange((value) => {
           settings.ai.temperature = value;
           commit();
@@ -385,8 +384,7 @@ export class TranslatorSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("orbOpacity"))
       .addSlider((slider) => {
-        slider.setLimits(0.05, 1, 0.05).setValue(settings.orbOpacity).setDynamicTooltip();
-        slider.setInstant(false);
+        slider.setLimits(0.05, 1, 0.05).setValue(settings.orbOpacity);
         slider.onChange((value) => {
           settings.orbOpacity = value;
           commit();

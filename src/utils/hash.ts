@@ -3,8 +3,8 @@
  * expose crypto.subtle, so fall back to a 64-bit FNV-1a hash.
  */
 export async function hashKey(input: string): Promise<string> {
-  const subtle = globalThis.crypto?.subtle;
-  if (subtle && typeof globalThis.crypto?.subtle?.digest === "function") {
+  const subtle = window.crypto?.subtle;
+  if (subtle && typeof window.crypto?.subtle?.digest === "function") {
     try {
       const bytes = new TextEncoder().encode(input);
       const digest = await subtle.digest("SHA-256", bytes);

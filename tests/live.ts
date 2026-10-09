@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+Object.assign(globalThis, { window: { setTimeout, clearTimeout } });
 import { googleTranslate } from "../src/engines/google";
 import { microsoftTranslate, microsoftTranslateBatch } from "../src/engines/microsoft";
 import { aiTranslateBatch, aiTranslate } from "../src/engines/ai";
