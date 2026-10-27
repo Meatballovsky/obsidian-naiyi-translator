@@ -14,6 +14,8 @@ export interface InjectOptions {
   renderMarkdown?: boolean;
   /** Translation rendering style (e.g. "card", "quote", "minimal") */
   style?: string;
+  /** Owns wrappers even while Obsidian parks their section outside the live DOM. */
+  scope?: HTMLElement;
 }
 
 export type Renderer = (container: HTMLElement, markdown: string, component: Component) => void | Promise<void>;
@@ -21,6 +23,11 @@ export type Renderer = (container: HTMLElement, markdown: string, component: Com
 const renderVersions = new WeakMap<HTMLElement, number>();
 const renderScopes = new Map<HTMLElement, Component>();
 const removalObservers = new Map<Document, MutationObserver>();
+const scopedWrappers = new Map<HTMLElement, Map<HTMLElement, HTMLElement>>();
+
+export function clearAllInjected(): void {
+  for (const scope of scopedWrappers.keys()) clearInjected(scope);
+}
 
 /** Plugin unload must release even a render whose preview was just detached. */
 export function disposeRenderScopes(): void {
@@ -168,6 +175,11 @@ export function inject(
     wrapper.classList.remove("obstr-style-card", "obstr-style-quote", "obstr-style-minimal");
     wrapper.classList.add(`obstr-style-${style}`);
   }
+  if (options.scope) {
+    let wrappers = scopedWrappers.get(options.scope);
+    if (!wrappers) scopedWrappers.set(options.scope, wrappers = new Map());
+    wrappers.set(wrapper, el);
+  }
   el.setAttribute(UNIT_ATTRIBUTE, options.state);
   wrapper.dataset.state = options.state;
 
@@ -233,8 +245,8 @@ function attach(el: HTMLElement, wrapper: HTMLElement): void {
   el.insertAdjacentElement("afterend", wrapper);
 }
 
-export function markPending(el: HTMLElement, render: Renderer, style?: string): void {
-  inject(el, { state: "pending", style }, render);
+export function markPending(el: HTMLElement, render: Renderer, style?: string, scope?: HTMLElement): void {
+  inject(el, { state: "pending", style, scope }, render);
 }
 
 /**
@@ -261,6 +273,16 @@ export function dropUnit(el: HTMLElement): void {
 }
 
 export function clearInjected(root: HTMLElement): void {
+  for (const [scope, wrappers] of scopedWrappers) {
+    if (scope !== root && !root.contains(scope)) continue;
+    // A detached section can be reused by the preview later. Clean the actual
+    // nodes we created, rather than just those currently found by querySelector.
+    scopedWrappers.delete(scope);
+    for (const [wrapper, source] of wrappers) {
+      removeWrapper(wrapper);
+      source.removeAttribute(UNIT_ATTRIBUTE);
+    }
+  }
   root.querySelectorAll(`.${WRAPPER_CLASS}`).forEach(removeWrapper);
   root.querySelectorAll(`[${UNIT_ATTRIBUTE}]`).forEach((node) => node.removeAttribute(UNIT_ATTRIBUTE));
 }

@@ -6,7 +6,7 @@ import { BatchQueue } from "./schedule/batch-queue";
 import { TranslationCache, type CachedEntry } from "./schedule/cache";
 import { Orchestrator } from "./orchestrator";
 import { FloatingOrb } from "./ui/orb";
-import { clearInjected, disposeRenderScopes, refreshInjectedTypography } from "./ui/inject";
+import { clearAllInjected, clearInjected, disposeRenderScopes, refreshInjectedTypography } from "./ui/inject";
 import { listModels, maxItemsPerBatch, translateTexts } from "./engines";
 import { TranslatorSettingTab } from "./settingsTab";
 import { t } from "./i18n";
@@ -30,6 +30,8 @@ export default class TranslatorOrbPlugin extends Plugin {
   private orb: FloatingOrb | null = null;
   private attachedLeaf: MarkdownView | null = null;
   private attachedPath: string | null = null;
+  private attachedRoot: HTMLElement | null = null;
+  private attachmentObserver: MutationObserver | null = null;
   private cacheSaveTimer: number | null = null;
 
   async onload(): Promise<void> {
@@ -131,6 +133,7 @@ export default class TranslatorOrbPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.attachmentObserver?.disconnect();
     this.orb?.destroy();
     this.orb = null;
     this.orchestrator?.clear();
@@ -193,7 +196,9 @@ export default class TranslatorOrbPlugin extends Plugin {
   private activeReadingView(): MarkdownView | null {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return null;
-    return this.readingRoot(view) ? view : null;
+    // Preview DOM can be absent briefly during a redraw. Keep watching the view
+    // so its replacement root and button are attached when rendering finishes.
+    return view.getMode() === "preview" ? view : null;
   }
 
   /**
@@ -205,15 +210,25 @@ export default class TranslatorOrbPlugin extends Plugin {
 
     const path = view?.file?.path ?? null;
     if (this.attachedLeaf && (this.attachedLeaf !== view || this.attachedPath !== path)) {
+      this.attachmentObserver?.disconnect();
+      this.attachmentObserver = null;
       this.orb?.destroy();
       this.orb = null;
       this.attachedLeaf = null;
+      this.attachedRoot = null;
       this.orchestrator.clear();
     }
     if (!view) return;
 
+    const root = this.readingRoot(view);
+    if (this.attachedRoot && this.attachedRoot !== root) this.clearTranslation();
+    this.attachedRoot = root;
     this.attachedLeaf = view;
     this.attachedPath = path;
+    if (this.orb && !this.orb.isAttached()) {
+      this.orb.destroy();
+      this.orb = null;
+    }
     if (!this.orb) {
       this.orb = new FloatingOrb(view.contentEl, this.settings, {
         onToggle: () => this.toggleTranslation(),
@@ -221,10 +236,20 @@ export default class TranslatorOrbPlugin extends Plugin {
         isRunning: () => this.orchestrator.isRunning(),
       });
     }
+    if (!this.attachmentObserver) {
+      const Observer = view.contentEl.ownerDocument.defaultView!.MutationObserver;
+      this.attachmentObserver = new Observer(() => {
+        if (this.readingRoot(view) !== this.attachedRoot || !this.orb?.isAttached()) this.syncAttachment();
+      });
+      this.attachmentObserver.observe(view.contentEl, { childList: true, subtree: true });
+    }
     this.orb.applySettings(this.settings);
   }
 
   private toggleTranslation(): void {
+    // Reconcile the view before using the session's state. An orb in a recycled
+    // pane must not toggle a session whose root belongs to the previous render.
+    this.syncAttachment();
     const view = this.activeReadingView();
     if (!view) {
       new Notice("Open a note in reading view to translate it.", 3000);
@@ -237,7 +262,9 @@ export default class TranslatorOrbPlugin extends Plugin {
       this.clearTranslation();
       return;
     }
-    void this.orchestrator.start(root);
+    void this.orchestrator.start(root).catch((error: unknown) => {
+      new Notice(`Translation could not start: ${String(error).slice(0, 160)}`, 4000);
+    });
     this.orb?.syncRunningState();
   }
 
@@ -252,6 +279,7 @@ export default class TranslatorOrbPlugin extends Plugin {
    * markdown leaf rather than only the active view.
    */
   private clearEverywhere(): void {
+    clearAllInjected();
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
       const root = this.previewRoot(leaf.view as MarkdownView);
       if (root) clearInjected(root);

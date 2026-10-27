@@ -7,6 +7,9 @@ import { TranslationCache } from "../src/schedule/cache";
 import { TranslateQueue } from "../src/schedule/queue";
 import { BatchQueue } from "../src/schedule/batch-queue";
 import { hashKey } from "../src/utils/hash";
+import { ViewportWatcher } from "../src/schedule/viewport";
+import TranslatorOrbPlugin from "../src/main";
+import { MarkdownView } from "obsidian";
 import { FROG_ORB_SVG } from "../src/ui/icons";
 import {
   collectUnits,
@@ -97,6 +100,46 @@ const ORIGINAL_NODE_COUNT = root.querySelectorAll("*").length;
 const texts = () => collectUnits(root).map((unit) => unit.text);
 
 async function main(): Promise<void> {
+  await test("clearing a layer removes translated blocks parked outside the preview", () => {
+    const pane = document.createElement("div");
+    const parked = document.createElement("div");
+    document.body.append(pane);
+    const section = pane.createDiv();
+    const source = section.createEl("p");
+    source.textContent = "Source";
+    inject(source, { state: "done", translation: "译文", scope: pane }, () => {});
+    parked.append(section);
+    clearInjected(pane);
+    pane.append(section);
+    assert.equal(pane.querySelector(".obstr-wrapper"), null);
+    assert.equal(source.hasAttribute(UNIT_ATTRIBUTE), false);
+    pane.remove();
+  });
+
+  await test("viewport disconnect ignores already queued callbacks and margin updates retain targets", () => {
+    const observers: FakeObserver[] = [];
+    class FakeObserver {
+      targets = new Set<Element>();
+      constructor(readonly callback: (entries: {target: Element; isIntersecting: boolean}[]) => void) { observers.push(this); }
+      observe(el: Element) { this.targets.add(el); }
+      unobserve(el: Element) { this.targets.delete(el); }
+      disconnect() { this.targets.clear(); }
+    }
+    Object.assign(globalThis, { IntersectionObserver: FakeObserver });
+    const source = document.createElement("p");
+    let entered = 0;
+    const watcher = new ViewportWatcher({ rootMarginPx: 100, onEnter: () => entered++ });
+    watcher.observe([source]);
+    const old = observers[0];
+    watcher.setRootMargin(200);
+    assert.ok(observers[1].targets.has(source));
+    old.callback([{ target: source, isIntersecting: true }]);
+    assert.equal(entered, 0);
+    watcher.disconnect();
+    observers[1].callback([{ target: source, isIntersecting: true }]);
+    assert.equal(entered, 0);
+  });
+
   await test("Markdown components release on replacement, clearing and external preview removal", async () => {
     const pane = document.createElement("div");
     document.body.append(pane);
@@ -590,7 +633,7 @@ async function main(): Promise<void> {
     await starting;
     assert.equal(session.isRunning(), false);
     assert.equal(watchers.length, 0, "cancelled initialization must not start observing");
-    for (let round = 0; round < 3; round++) {
+    for (let round = 0; round < 30; round++) {
       await session.start(pane);
       const watcher = watchers[watchers.length - 1];
       assert.equal(watcher.targets.size, 2, "new session must observe previously translated blocks again");
@@ -617,6 +660,80 @@ async function main(): Promise<void> {
     assert.equal(session.isRunning(), true);
     assert.equal(watchers.filter((watcher) => !watcher.disconnected).length, 1);
     session.clear(); pane.remove();
+  });
+
+  await test("a failed startup resets the toggle and can be retried", async () => {
+    const OriginalObserver = (globalThis as any).IntersectionObserver;
+    const pane = document.createElement("div");
+    pane.innerHTML = "<p>Reading text.</p>";
+    document.body.append(pane);
+    const queue = new TranslateQueue({ capacity: 4, rate: 2, maxRetries: 0, baseRetryDelayMs: 1 });
+    const batch = new BatchQueue(queue, { maxItems: 4, maxChars: 1000, delayMs: 1 });
+    const session = new Orchestrator(queue, batch, new TranslationCache({ maxEntries: 10, ttlDays: 7 }),
+      () => ({ ...DEFAULT_SETTINGS }), () => {}, {
+        onRunningChange: () => {}, onProgress: () => {}, onCacheWrite: () => {},
+      });
+    Object.assign(globalThis, { IntersectionObserver: class { constructor() { throw new Error("preview unavailable"); } } });
+    try {
+      await assert.rejects(session.start(pane), /preview unavailable/);
+      assert.equal(session.isRunning(), false);
+    } finally {
+      Object.assign(globalThis, { IntersectionObserver: OriginalObserver });
+    }
+    await session.start(pane);
+    assert.equal(session.isRunning(), true);
+    session.clear(); pane.remove();
+  });
+
+  await test("orb recovers after preview replacement and removal through repeated toggles", async () => {
+    const contentEl = document.createElement("div");
+    document.body.append(contentEl);
+    const preview = () => {
+      const reading = document.createElement("div");
+      reading.className = "markdown-reading-view";
+      reading.innerHTML = '<div class="markdown-preview-view"><section><p>Original paragraph.</p></section></div>';
+      return reading;
+    };
+    contentEl.append(preview());
+    const view = Object.assign(new MarkdownView(), { contentEl, file: { path: "demo.md" }, getMode: () => "preview" });
+    const plugin = new TranslatorOrbPlugin() as any;
+    let running = false;
+    let sessionRoot: HTMLElement | null = null;
+    Object.assign(plugin, {
+      app: { workspace: { getActiveViewOfType: () => view, getLeavesOfType: () => [{ view }] } },
+      orchestrator: {
+        isRunning: () => running,
+        clear: () => { running = false; if (sessionRoot) clearInjected(sessionRoot); sessionRoot = null; },
+        start: async (root: HTMLElement) => {
+          running = true; sessionRoot = root;
+          inject(root.querySelector("p")!, { state: "done", translation: "译文", scope: root }, () => {});
+        },
+      },
+    });
+    plugin.syncAttachment();
+    const flush = () => new Promise((resolve) => window.setTimeout(resolve, 0));
+    for (let round = 0; round < 20; round++) {
+      (contentEl.querySelector("button") as HTMLButtonElement).click();
+      assert.equal(running, true);
+      const oldSection = contentEl.querySelector("section")!;
+      oldSection.remove(); // simulate a preview section parked off-DOM
+      (contentEl.querySelector("button") as HTMLButtonElement).click();
+      assert.equal(running, false);
+      assert.equal(oldSection.querySelector(".obstr-wrapper"), null);
+      contentEl.querySelector(".markdown-preview-view")!.append(oldSection);
+      contentEl.querySelector(".obstr-orb")!.remove();
+      await flush();
+      assert.equal(contentEl.querySelectorAll(".obstr-orb").length, 1, "removed orb must be recreated");
+      (contentEl.querySelector("button") as HTMLButtonElement).click();
+      assert.equal(running, true);
+      // The same view/file may replace its entire preview without a leaf event.
+      contentEl.replaceChildren(preview());
+      await flush();
+      assert.equal(running, false, "replacing the root retires the old session");
+      assert.equal(contentEl.querySelectorAll("button").length, 1);
+      assert.equal(contentEl.querySelector("button")!.getAttribute("aria-pressed"), "false");
+    }
+    plugin.onunload(); contentEl.remove();
   });
 
   console.log(results.join("\n"));

@@ -63,6 +63,7 @@ export class FloatingOrb {
 
     this.ball.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 || event.isPrimary === false) return;
+      event.stopPropagation();
       this.suppressClick = false;
       try { this.ball.setPointerCapture?.(event.pointerId); } catch { /* detached pointer */ }
       const rect = this.root.getBoundingClientRect();
@@ -167,6 +168,10 @@ export class FloatingOrb {
 
   setVisible(visible: boolean): void {
     this.root.classList.toggle("is-offscreen", !visible);
+  }
+
+  isAttached(): boolean {
+    return !this.destroyed && this.root.parentElement === this.container && this.ball.parentElement === this.root;
   }
 
   destroy(): void {

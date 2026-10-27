@@ -80,21 +80,28 @@ export class Orchestrator {
     this.units = new WeakMap();
     this.running = true;
     this.events.onRunningChange(true);
-    const providerKey = await providerIdentity(settings);
-    if (epoch !== this.epoch || !this.running) return;
-    this.providerKey = providerKey;
-    this.done = 0;
+    try {
+      const providerKey = await providerIdentity(settings);
+      if (epoch !== this.epoch || !this.running) return;
+      this.providerKey = providerKey;
+      this.done = 0;
 
-    this.watcher?.disconnect();
-    this.watcher = new ViewportWatcher({
-      rootMarginPx: settings.preloadMarginPx,
-      onEnter: (el) => {
-        void this.translateUnit(el);
-      },
-    });
+      this.watcher?.disconnect();
+      this.watcher = new ViewportWatcher({
+        rootMarginPx: settings.preloadMarginPx,
+        onEnter: (el) => {
+          if (epoch !== this.epoch || !this.running || this.root !== root) return;
+          void this.translateUnit(el);
+        },
+      });
 
-    this.observeRerenders(root);
-    this.collectAndObserve();
+      this.observeRerenders(root);
+      this.collectAndObserve();
+    } catch (error) {
+      if (epoch !== this.epoch) return;
+      this.clear();
+      throw error;
+    }
   }
 
   stop(): void {
@@ -121,6 +128,7 @@ export class Orchestrator {
     // Invalidate any work still awaiting hashing or rendering.
     this.epoch += 1;
     if (this.root) clearInjected(this.root);
+    this.root = null;
     this.units = new WeakMap();
     this.done = 0;
     this.total = 0;
@@ -163,7 +171,7 @@ export class Orchestrator {
   }
 
   private async translateUnit(el: HTMLElement): Promise<void> {
-    if (!el.isConnected) return;
+    if (!this.running || !el.isConnected || !this.root?.contains(el)) return;
     const settings = this.getSettings();
     const epoch = this.epoch;
     const text = extractText(el);
@@ -179,7 +187,7 @@ export class Orchestrator {
     }
 
     const key = await this.cacheKey(text);
-    if (epoch !== this.epoch || !this.running) return;
+    if (epoch !== this.epoch || !this.running || !el.isConnected || !this.root?.contains(el)) return;
     const cached = settings.enableCache ? this.cache.get(key) : undefined;
     if (cached !== undefined) {
       if (epoch === this.epoch) this.paint(el, text, cached);
@@ -187,7 +195,7 @@ export class Orchestrator {
     }
 
     this.units.set(el, { text, status: "pending" });
-    markPending(el, this.render, settings.translationStyle);
+    markPending(el, this.render, settings.translationStyle, this.root);
 
     const sessionId = this.sessionId;
     try {
@@ -197,14 +205,14 @@ export class Orchestrator {
         text,
         (texts) => translateTexts(texts, settings)
       );
-      if (epoch !== this.epoch) return;
+      if (epoch !== this.epoch || !this.running || !el.isConnected || !this.root?.contains(el)) return;
       if (translated.trim()) {
         this.cache.set(key, translated);
         this.events.onCacheWrite();
       }
       this.paint(el, text, translated);
     } catch (error) {
-      if (epoch !== this.epoch) return;
+      if (epoch !== this.epoch || !this.running || !el.isConnected || !this.root?.contains(el)) return;
       if (isCancelled(error)) {
         // Stopped or switched away: no result to show and no error to report.
         this.units.delete(el);
@@ -212,7 +220,7 @@ export class Orchestrator {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
-      inject(el, { state: "error", translation: message, style: settings.translationStyle }, this.render);
+      inject(el, { state: "error", translation: message, style: settings.translationStyle, scope: this.root }, this.render);
       this.units.set(el, { text, status: "pending" });
     } finally {
       // Only the session that is still current may move the counter the orb shows.
@@ -234,6 +242,7 @@ export class Orchestrator {
         translation,
         renderMarkdown: settings.renderMarkdown,
         style: settings.translationStyle,
+        scope: this.root ?? undefined,
       },
       this.render
     );

@@ -1,7 +1,7 @@
 {
   "name": "naiyi-translate",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Inline bilingual reading with scroll-loaded translations and Google, Microsoft, or OpenAI-compatible engines.",
   "type": "module",
   "scripts": {

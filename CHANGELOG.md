@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.6
+
+- Clear translated sections even when the reading view temporarily parks them outside the live DOM.
+- Cancel in-flight tasks logically as well as queued tasks, preventing late failures and retries from affecting a new translation session.
+- Ignore callbacks from retired viewport observers and preserve pending viewport targets when the preload margin changes.
+- Recreate a removed floating button, reset sessions after preview-root replacement, and recover cleanly from failed startup.
+- Added regressions for parked blocks, late failures, observer replacement, and repeated toggles across preview reconstruction.
+
 ## 0.1.5
 
 - Addressed community review errors: removed redundant manifest wording, gave each Markdown translation its own disposable render component, sanitized embedded SVGs, used native settings headings, and replaced direct orb style assignments with DOM helpers.

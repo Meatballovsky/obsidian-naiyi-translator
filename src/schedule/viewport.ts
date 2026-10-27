@@ -13,6 +13,7 @@ export class ViewportWatcher {
   private observer: IntersectionObserver | null = null;
   private rootMarginPx: number;
   private onEnter: (el: HTMLElement) => void;
+  private targets = new Set<HTMLElement>();
 
   constructor(options: ViewportWatcherOptions) {
     this.rootMarginPx = options.rootMarginPx;
@@ -22,22 +23,31 @@ export class ViewportWatcher {
 
   private rebuild(): void {
     this.observer?.disconnect();
-    this.observer = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       (entries) => {
+        // disconnect() does not make an already-delivered callback belong to the
+        // next session (or the replacement observer after a settings change).
+        if (this.observer !== observer) return;
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           const el = entry.target as HTMLElement;
-          this.observer?.unobserve(el);
+          if (!this.targets.delete(el)) continue;
+          observer.unobserve(el);
           this.onEnter(el);
         }
       },
       { root: null, rootMargin: `${this.rootMarginPx}px`, threshold: 0 }
     );
+    this.observer = observer;
+    for (const el of this.targets) observer.observe(el);
   }
 
   observe(elements: Iterable<HTMLElement>): void {
     if (!this.observer) return;
-    for (const el of elements) this.observer.observe(el);
+    for (const el of elements) {
+      this.targets.add(el);
+      this.observer.observe(el);
+    }
   }
 
   setRootMargin(rootMarginPx: number): void {
@@ -49,5 +59,6 @@ export class ViewportWatcher {
   disconnect(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.targets.clear();
   }
 }

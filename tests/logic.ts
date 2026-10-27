@@ -76,6 +76,30 @@ function retryContext(over: Partial<RequestRetryContext> = {}): RequestRetryCont
 }
 
 async function main(): Promise<void> {
+  await test("cancelled in-flight failures cannot retry or drain a new session", async () => {
+    const queue = mkQueue({ capacity: 2 });
+    let failOld!: (error: unknown) => void;
+    let finishNew!: (value: string) => void;
+    let decisions = 0;
+    queue.setOptions({ retryPolicy: { decide: () => { decisions++; return { action: "fail", failQueue: true }; } } });
+    const old = new Promise((resolve) => queue.enqueue(mkTask("old", () => new Promise((_, reject) => { failOld = reject; }), {
+      resolve, reject: (error) => resolve(error),
+    }, "old-session")));
+    queue.cancelScope("old-session");
+    const fresh = new Promise((resolve, reject) => queue.enqueue(mkTask("fresh", () => new Promise<string>((done) => { finishNew = done; }), {
+      resolve, reject,
+    }, "new-session")));
+    // Attach handlers before failing either request so a regression reports cleanly.
+    const settledFresh = fresh.then((value) => value, (error) => error);
+    failOld(httpError(401));
+    await sleep(0);
+    finishNew("new translation");
+    assert.ok(isCancelled(await old));
+    assert.equal(await settledFresh, "new translation");
+    assert.equal(decisions, 0, "retired requests must not affect the provider retry policy");
+    queue.clear();
+  });
+
   await test("token bucket caps simultaneous in-flight requests", async () => {
     const queue = mkQueue({ capacity: 3, rate: 10 });
     let inFlight = 0;

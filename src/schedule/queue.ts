@@ -93,7 +93,7 @@ export class TranslateQueue {
     this.schedule();
   }
 
-  /** Drain every waiting task of a scope and report the in-flight ones. */
+  /** Settle the entire scope; late network failures must not retry or fail new work. */
   cancelScope(scope: string): QueueTask<unknown>[] {
     const inFlight: QueueTask<unknown>[] = [];
     for (const task of Array.from(this.waitingByHash.values())) {
@@ -105,7 +105,9 @@ export class TranslateQueue {
     const droppedWaiting = this.waiting.filter((task) => task.scope !== scope);
     this.waiting.replace(droppedWaiting);
     for (const task of Array.from(this.executingByHash.values())) {
-      if (task.scope === scope) inFlight.push(task);
+      if (task.scope !== scope) continue;
+      inFlight.push(task);
+      this.drain(task, cancelledError());
     }
     this.schedule();
     return inFlight;
@@ -198,8 +200,10 @@ export class TranslateQueue {
       const value = await task.execute();
       this.executingByHash.delete(task.hash);
       // Any completed request proves the provider recovered from rate limiting.
-      this.consecutiveRateLimits = 0;
-      if (!task.drained) task.resolve(value);
+      if (!task.drained) {
+        this.consecutiveRateLimits = 0;
+        task.resolve(value);
+      }
     } catch (error) {
       this.executingByHash.delete(task.hash);
       if (task.drained) return;

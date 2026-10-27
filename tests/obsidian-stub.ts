@@ -17,6 +17,13 @@ export class Component {
     for (const dispose of this.disposers.splice(0)) dispose();
   }
 }
+export class Plugin extends Component {}
+export class MarkdownView {}
+export class PluginSettingTab {}
+export class Setting {}
+export class App {}
+export class Notice { constructor(..._args: unknown[]) {} }
+export const MarkdownRenderer = { render: async () => {} };
 export interface RequestUrlParam {
   url: string;
   method?: string;
