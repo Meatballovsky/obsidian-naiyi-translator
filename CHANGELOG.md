@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- Match Obsidian's reading-view line breaks: translate explicit br-separated lines independently instead of treating a multi-line paragraph as one translation unit.
+- Keep natural visual wrapping within a line together, preserve inline source formatting across nested breaks, and restore the exact original DOM nodes when clearing translations, including parked preview sections.
+- Preserve external preview edits instead of restoring stale line projections over re-rendered content. Markdown files remain unchanged.
+
 ## 0.1.7
 
 - Enforce concurrent logical tasks and real HTTP attempts independently from request launch rate. Retries and individual batch fallbacks use the same transport limiter.

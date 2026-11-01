@@ -100,6 +100,63 @@ const ORIGINAL_NODE_COUNT = root.querySelectorAll("*").length;
 const texts = () => collectUnits(root).map((unit) => unit.text);
 
 async function main(): Promise<void> {
+  await test("Obsidian br-separated paragraphs translate line by line and restore exact nodes", () => {
+    const pane = document.createElement("div");
+    pane.innerHTML = '<p>First source line.<br>Second source line.<br>Third source line.</p><p>A naturally wrapped long paragraph remains one unit.</p>';
+    document.body.append(pane);
+    const paragraph = pane.querySelector("p")!;
+    const original = paragraph.innerHTML;
+    const nodes = Array.from(paragraph.childNodes);
+    const units = collectUnits(pane, true);
+    assert.deepEqual(units.map((unit) => unit.text), ["First source line.", "Second source line.", "Third source line.", "A naturally wrapped long paragraph remains one unit."]);
+    assert.equal(collectUnits(pane, true).length, 4, "rescan must not split projections again");
+    units.forEach((unit, i) => inject(unit.el, { state: "done", translation: `译文${i}`, scope: pane }, () => {}));
+    assert.deepEqual(Array.from(paragraph.children).map((el) => el.classList.contains(WRAPPER_CLASS)), [false, true, false, true, false, true]);
+    clearInjected(pane);
+    assert.equal(paragraph.innerHTML, original);
+    assert.deepEqual(Array.from(paragraph.childNodes), nodes);
+    for (let i = 0; i < nodes.length; i++) assert.equal(paragraph.childNodes[i], nodes[i]);
+    pane.remove();
+  });
+
+  await test("line splitting preserves marks across nested breaks and cleans parked projections", () => {
+    const pane = document.createElement("div");
+    pane.innerHTML = '<p><strong>Bold first line.<br>Bold second line.</strong> With <a href="../note">a link</a> and <code>code()</code>.</p>';
+    document.body.append(pane);
+    const paragraph = pane.querySelector("p")!;
+    const original = paragraph.innerHTML;
+    const originalStrong = paragraph.firstChild;
+    const units = collectUnits(pane, true);
+    assert.equal(units.length, 2);
+    assert.ok(units[0].el.querySelector("strong"));
+    assert.ok(units[1].el.querySelector("strong"));
+    assert.ok(units[1].text.includes("[a link](../note)"));
+    assert.ok(units[1].text.includes("`code()`"));
+    for (const unit of units) inject(unit.el, { state: "done", translation: "译文", scope: pane }, () => {});
+    paragraph.remove();
+    clearInjected(pane);
+    assert.equal(paragraph.innerHTML, original);
+    assert.equal(paragraph.firstChild, originalStrong);
+    pane.remove();
+  });
+
+  await test("line projection cleanup does not overwrite external changes and allows re-render splitting", () => {
+    const pane = document.createElement("div");
+    pane.innerHTML = '<p>Original first line.<br>Original second line.</p>';
+    document.body.append(pane);
+    const paragraph = pane.querySelector("p")!;
+    collectUnits(pane, true);
+    paragraph.innerHTML = 'New first line.<br>New second line.';
+    assert.deepEqual(collectUnits(pane, true).map((unit) => unit.text), ["New first line.", "New second line."]);
+    clearInjected(pane);
+    assert.equal(paragraph.innerHTML, 'New first line.<br>New second line.');
+    collectUnits(pane, true);
+    paragraph.textContent = "Latest external edit.";
+    clearInjected(pane);
+    assert.equal(paragraph.textContent, "Latest external edit.");
+    pane.remove();
+  });
+
   await test("clearing a layer removes translated blocks parked outside the preview", () => {
     const pane = document.createElement("div");
     const parked = document.createElement("div");

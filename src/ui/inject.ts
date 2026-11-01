@@ -1,3 +1,4 @@
+import { restoreAllLineSegments, restoreLineSegments } from "../chunk/line-segments";
 import { Component } from "obsidian";
 import {
   TEXT_CLASS,
@@ -27,6 +28,7 @@ const scopedWrappers = new Map<HTMLElement, Map<HTMLElement, HTMLElement>>();
 
 export function clearAllInjected(): void {
   for (const scope of scopedWrappers.keys()) clearInjected(scope);
+  restoreAllLineSegments();
 }
 
 /** Plugin unload must release even a render whose preview was just detached. */
@@ -285,6 +287,7 @@ export function clearInjected(root: HTMLElement): void {
   }
   root.querySelectorAll(`.${WRAPPER_CLASS}`).forEach(removeWrapper);
   root.querySelectorAll(`[${UNIT_ATTRIBUTE}]`).forEach((node) => node.removeAttribute(UNIT_ATTRIBUTE));
+  restoreLineSegments(root);
 }
 
 /**

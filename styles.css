@@ -236,3 +236,7 @@
   line-height: 1.4;
   margin: 0;
 }
+
+/* Explicit Obsidian line breaks become independent source anchors while on. */
+.obstr-source-line { display: block; }
+.obstr-source-line:empty { min-height: 1em; }

@@ -1,3 +1,4 @@
+import { LINE_CLASS, prepareLineSegments } from "./line-segments";
 export const UNIT_ATTRIBUTE = "data-obstr-unit";
 /**
  * The marker pair between the chunker and the injector. Declared here because the
@@ -13,6 +14,7 @@ export const TEXT_CLASS = "obstr-text";
  * into these, so no sentence splitting is needed — a unit is one rendered block.
  */
 const UNIT_SELECTOR = [
+  `.${LINE_CLASS}`,
   "p",
   "h1", "h2", "h3", "h4", "h5", "h6",
   "li",
@@ -76,7 +78,8 @@ function isVisible(el: HTMLElement): boolean {
  * exactly once, and anything inside an injected wrapper is excluded so a translation
  * can never become source.
  */
-export function collectUnits(root: HTMLElement): ParagraphUnit[] {
+export function collectUnits(root: HTMLElement, splitLineBreaks = false): ParagraphUnit[] {
+  if (splitLineBreaks) prepareLineSegments(root);
   const nodes = Array.from(root.querySelectorAll<HTMLElement>(UNIT_SELECTOR));
   const units: ParagraphUnit[] = [];
 

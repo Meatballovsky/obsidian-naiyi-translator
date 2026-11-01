@@ -24,7 +24,7 @@
 
 ## English overview
 
-Naiyi Translate adds translations beneath the original text in Reading View without changing your Markdown files. A single frog button toggles the translation layer. Translations load as you scroll; switching notes turns the layer off. Supports Google, Microsoft Edge, and OpenAI-compatible cloud or local models.
+Naiyi Translate adds translations beneath the original text in Reading View without changing your Markdown files. A single frog button toggles the translation layer. Explicit line breaks in Reading View receive their own translations, while natural text wrapping stays together. Translations load as you scroll; switching notes turns the layer off. Supports Google, Microsoft Edge, and OpenAI-compatible cloud or local models.
 
 ### Installation
 

@@ -155,7 +155,7 @@ export class Orchestrator {
 
   private collectAndObserve(): void {
     if (!this.root || !this.watcher) return;
-    const units = collectUnits(this.root);
+    const units = collectUnits(this.root, true);
     this.total = units.length;
     this.events.onProgress(this.done, this.total);
 
