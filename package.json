@@ -1,8 +1,8 @@
 {
   "name": "naiyi-translate",
   "private": true,
-  "version": "0.1.8",
-  "description": "Inline bilingual reading with scroll-loaded translations and Google, Microsoft, or OpenAI-compatible engines.",
+  "version": "0.1.9",
+  "description": "Inline bilingual reading with scroll-loaded translations, free services, and OpenAI-compatible engines.",
   "type": "module",
   "scripts": {
     "dev": "node esbuild.config.mjs",

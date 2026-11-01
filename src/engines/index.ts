@@ -1,3 +1,4 @@
+import { BILIBILI_MODEL, bilibiliTranslate } from "./bilibili";
 import { protectText, validateTranslation, TranslationValidationError } from "./protection";
 import type { TranslatorSettings } from "../settings";
 import { googleTranslate } from "./google";
@@ -20,6 +21,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function providerIdentity(settings: TranslatorSettings): Promise<string> {
   const { engine, ai } = settings;
+  if (engine === "bilibili") return `v2:bilibili:${BILIBILI_MODEL}`;
   if (engine !== "ai") return `v2:${engine}`;
   const promptHash = await hashKey(`${ai.systemPrompt}\u0000${ai.userPrompt}`);
   return `v2:ai\u0000${ai.baseUrl}\u0000${ai.model}\u0000${ai.temperature}\u0000${promptHash}`;
@@ -33,6 +35,12 @@ async function translateBatch(
   const { engine, sourceLang, targetLang, requestTimeoutMs, ai } = settings;
 
   if (texts.length === 0) return [];
+
+  if (engine === "bilibili") {
+    const out: string[] = [];
+    for (const text of texts) out.push(await bilibiliTranslate(text, sourceLang, targetLang, requestTimeoutMs, signal));
+    return out;
+  }
 
   if (engine === "google") {
     // No reliable N:N mapping on the gtx endpoint; one request per unit.
@@ -97,7 +105,7 @@ export const listModels = aiListModels;
 
 export function canBatch(settings: TranslatorSettings): boolean {
   // Google's endpoint re-segments, so batching there loses the 1:1 mapping.
-  return settings.engine !== "google";
+  return settings.engine === "microsoft" || settings.engine === "ai";
 }
 
 export function maxItemsPerBatch(settings: TranslatorSettings): number {

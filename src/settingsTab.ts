@@ -25,6 +25,7 @@ const LANGUAGES: [string, string][] = [
 const ENGINES: [EngineId, string][] = [
   ["google", "Google (free, no key)"],
   ["microsoft", "Microsoft Edge (free, no key)"],
+  ["bilibili", "Bilibili Index-Translate 35B (free, experimental)"],
   ["ai", "Custom AI endpoint (OpenAI / Ollama / OMLX)"],
 ];
 
@@ -101,7 +102,7 @@ export class TranslatorSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(t("engineSelect"))
-      .setDesc(t("engineDesc"))
+      .setDesc(t(settings.engine === "bilibili" ? "bilibiliDesc" : "engineDesc"))
       .addDropdown((dropdown) => {
         for (const [value, label] of ENGINES) dropdown.addOption(value, label);
         dropdown.setValue(settings.engine).onChange(async (value) => {

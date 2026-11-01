@@ -287,7 +287,7 @@ export default class TranslatorOrbPlugin extends Plugin {
   }
 
   private async cycleEngine(): Promise<void> {
-    const order: EngineId[] = ["google", "microsoft", "ai"];
+    const order: EngineId[] = ["google", "microsoft", "bilibili", "ai"];
     const next = order[(order.indexOf(this.settings.engine) + 1) % order.length];
     this.settings.engine = next;
     await this.saveSettings();

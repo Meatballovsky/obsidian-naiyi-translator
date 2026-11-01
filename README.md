@@ -24,7 +24,7 @@
 
 ## English overview
 
-Naiyi Translate adds translations beneath the original text in Reading View without changing your Markdown files. A single frog button toggles the translation layer. Explicit line breaks in Reading View receive their own translations, while natural text wrapping stays together. Translations load as you scroll; switching notes turns the layer off. Supports Google, Microsoft Edge, and OpenAI-compatible cloud or local models.
+Naiyi Translate adds translations beneath the original text in Reading View without changing your Markdown files. A single frog button toggles the translation layer. Explicit line breaks in Reading View receive their own translations, while natural text wrapping stays together. Translations load as you scroll; switching notes turns the layer off. Supports Google, Microsoft Edge, Bilibili Index-Translate, and OpenAI-compatible cloud or local models.
 
 ### Installation
 
@@ -80,7 +80,7 @@ PDF、学术论文、抓取网页与 DOCX 经过清洗后，常以 Markdown 存�
 ### 3. 本地优先与隐私安全：与 Local LLM 深度契合
 
 * **直连 Node 网络栈**：请求通过 Obsidian 的 `requestUrl` 发出，不受阅读视图渲染进程的 CORS 与私有网络预检限制。
-* **内网无缝直连**：本地运行的 Ollama、OMLX、LM Studio、vLLM 等服务监听 `127.0.0.1` 即可直接通讯，无需将端口暴露至局域网，使用本机模型端点时，待译内容留在本机；选择 Google、Microsoft 或云端 AI 时，待译内容会发送至对应服务。
+* **内网无缝直连**：本地运行的 Ollama、OMLX、LM Studio、vLLM 等服务监听 `127.0.0.1` 即可直接通讯，无需将端口暴露至局域网，使用本机模型端点时，待译内容留在本机；选择 Google、Microsoft、Bilibili 或云端 AI 时，待译内容会发送至对应服务。
 
 ### 4. 译文底纹与原文排版
 
@@ -94,6 +94,7 @@ PDF、学术论文、抓取网页与 DOCX 经过清洗后，常以 Markdown 存�
 |:------------------ |:------------------------------ |:----------------------------------------------------------------------- |
 | **Google**         | 免费、免配置、即开即用（默认）                | 所用免费端点会重新切分句子，无法可靠保持批量段落 1:1 对齐，采用受控并发逐段流水线请求。                                    |
 | **Microsoft Edge** | 免费、免配置、支持批量请求                  | 支持安全批量翻译，以字符串数组发送请求，并严格校验返回数组长度。                                         |
+| **Bilibili Index-Translate** | 官方免费公共接口、无需密钥（实验性） | 固定 35B-A3B 模型、关闭思考，长段受控分块；复用限速、取消和格式校验。 |
 | **自定义 AI**         | 本地 Ollama / OMLX / OpenAI 兼容端点 | 兼容本地与云端模型（如 Qwen2.5 / DeepSeek 等）。默认发送关闭思考的参数（是否生效取决于服务端），可单独配置 AI 请求总超时，以适应本地模型加载。 |
 
 ---
@@ -157,3 +158,7 @@ PDF、学术论文、抓取网页与 DOCX 经过清洗后，常以 Markdown 存�
 
 - **致谢**：底层限流调度架构与 429 退避协议灵感源自 Chrome 扩展 [read-frog (陪读蛙)](https://github.com/mengxi-ream/read-frog)。
 - **开源协议**：本项目基于 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 开放源代码。
+
+### Bilibili Index-Translate preset
+
+Select **Bilibili Index-Translate 35B (free, experimental)** in the engine dropdown. No API key or local proxy is required by this adapter. It uses the [official public API](https://github.com/bilibili/Index-Translate/blob/main/inference/llm/call_api.py), sends source text to Bilibili, disables thinking, and bounds requests to 2,000 Unicode code points without cutting protection tokens. Truncated or invalid replies are rejected. Public-service availability and quotas are controlled by the provider; small local tests do not establish long-term reliability. Existing engine selections remain unchanged.

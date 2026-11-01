@@ -1,6 +1,7 @@
+import { bilibiliTranslate, splitBilibiliText, BILIBILI_URL, BILIBILI_MODEL } from "../src/engines/bilibili";
 import { protectText, validateTranslation, TranslationValidationError } from "../src/engines/protection";
 import { TransportLimiter, transportLimiter } from "../src/engines/transport";
-import { translateTexts } from "../src/engines";
+import { maxItemsPerBatch, translateTexts } from "../src/engines";
 import assert from "node:assert/strict";
 // Scheduling uses the host window; Node provides equivalent timer primitives.
 Object.assign(globalThis, { window: { setTimeout, clearTimeout } });
@@ -79,6 +80,59 @@ function retryContext(over: Partial<RequestRetryContext> = {}): RequestRetryCont
 }
 
 async function main(): Promise<void> {
+  await test("Bilibili chunks preserve Unicode, whitespace and whole protection tokens", () => {
+    const input = ("Technical prose 😀 ZXQNAIYI123QXZ. ".repeat(130)) + "\nLast sentence.";
+    const chunks = splitBilibiliText(input);
+    assert.ok(chunks.length > 1);
+    assert.equal(chunks.join(""), input);
+    assert.ok(chunks.every((chunk) => Array.from(chunk).length <= 2000));
+    assert.equal(chunks.reduce((n, chunk) => n + (chunk.match(/ZXQNAIYI123QXZ/g) ?? []).length, 0), 130);
+    assert.equal(maxItemsPerBatch({ ...DEFAULT_SETTINGS, engine: "bilibili" }), 1);
+  });
+
+  await test("Bilibili preset uses fixed anonymous endpoint, model and no-thinking payload", async () => {
+    const originalFetch = globalThis.fetch;
+    transportLimiter.configure(4, 10000);
+    let calls = 0;
+    globalThis.fetch = async (url, init) => {
+      calls++;
+      assert.equal(String(url), BILIBILI_URL);
+      assert.equal((init?.headers as Record<string, string>).Authorization, undefined);
+      const body = JSON.parse(init?.body as string);
+      assert.equal(body.model, BILIBILI_MODEL);
+      assert.deepEqual(body.chat_template_kwargs, { enable_thinking: false });
+      assert.equal(body.messages.length, 1); assert.equal(body.messages[0].role, "user");
+      assert.ok(body.messages[0].content.includes("简体中文"));
+      assert.equal(body.stream, false);
+      return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "这是中文译文。" } }] }));
+    };
+    try {
+      assert.deepEqual(await translateTexts(["This paragraph is synthetic."], {
+        ...DEFAULT_SETTINGS, engine: "bilibili", ai: { ...DEFAULT_SETTINGS.ai, apiKey: "test-private-key" },
+      }), ["这是中文译文。"]);
+      const controller = new AbortController(); controller.abort();
+      await assert.rejects(bilibiliTranslate("Text.", "auto", "zh-CN", 100, controller.signal), isCancelled);
+      await assert.rejects(bilibiliTranslate("Text.", "auto", "invalid", 100));
+      assert.equal(calls, 1);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  await test("Bilibili rejects truncation, absent messages and unclosed thought blocks", async () => {
+    const originalFetch = globalThis.fetch;
+    transportLimiter.configure(4, 10000);
+    try {
+      for (const choice of [
+        { finish_reason: "length", message: { content: "截断的译文" } },
+        { finish_reason: "stop" },
+        { finish_reason: "stop", message: { content: "<think>unfinished" } },
+        { finish_reason: "stop", message: { content: "" } },
+      ]) {
+        globalThis.fetch = async () => new Response(JSON.stringify({ choices: [choice] }));
+        await assert.rejects(bilibiliTranslate("Source text.", "en", "zh-TW", 100));
+      }
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
   await test("logical queue caps slow in-flight tasks even with fast token refill", async () => {
     const queue = mkQueue({ capacity: 2, rate: 10000 });
     let active = 0, peak = 0;

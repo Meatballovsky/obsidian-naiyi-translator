@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9
+
+- Added an optional, experimental Bilibili Index-Translate 35B-A3B preset using the official anonymous public API. Existing engine selections are preserved; custom AI keys are never read by this adapter.
+- Disable thinking with the provider's documented chat_template_kwargs, use controlled single-unit requests, and chunk long text at up to 2,000 Unicode code points while keeping syntax-protection tokens intact.
+- Reuse concurrency limits, launch-rate limits, cancellation, cache isolation and translation validation. Reject truncated, empty, malformed and unclosed reasoning outputs.
+- Added provider payload, credential-isolation, Unicode chunking and error-path tests, plus an explicit synthetic-text live probe.
+
 ## 0.1.8
 
 - Match Obsidian's reading-view line breaks: translate explicit br-separated lines independently instead of treating a multi-line paragraph as one translation unit.

@@ -1,4 +1,4 @@
-export type EngineId = "google" | "microsoft" | "ai";
+export type EngineId = "google" | "microsoft" | "bilibili" | "ai";
 
 export type OrbPosition = "right-middle" | "left-middle" | "custom";
 
