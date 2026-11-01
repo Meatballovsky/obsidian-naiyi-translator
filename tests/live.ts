@@ -1,3 +1,4 @@
+import { translateTexts } from "../src/engines";
 import assert from "node:assert/strict";
 Object.assign(globalThis, { window: { setTimeout, clearTimeout } });
 import { googleTranslate } from "../src/engines/google";
@@ -22,6 +23,16 @@ const SAMPLES = [
 ];
 
 async function main(): Promise<void> {
+  for (const engine of (process.env.GOOGLE_PROBE === "1" ? ["google", "microsoft"] : ["microsoft"]) as ("google" | "microsoft")[]) {
+    await test(`${engine} preserves protected formatting through the real service`, async () => {
+      const [result] = await translateTexts(["Please read `print(x)` and the formula $x^2$ at [this page](https://example.org/test).\nThe next line explains how the example works."], { ...DEFAULT_SETTINGS, engine, requestTimeoutMs: 8000 });
+      assert.ok(result.includes("`print(x)`"));
+      assert.ok(result.includes("$x^2$"));
+      assert.ok(result.includes("https://example.org/test"));
+      assert.ok(result.includes("\n"));
+      assert.ok(!result.includes("ZXQNAIYI"));
+    });
+  }
   await test("microsoft translates a batch with 1:1 mapping", async () => {
     const out = await microsoftTranslateBatch(SAMPLES, "auto", "zh-CN", 15000);
     assert.equal(out.length, SAMPLES.length);

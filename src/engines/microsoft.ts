@@ -21,7 +21,8 @@ export async function microsoftTranslateBatch(
   texts: string[],
   fromLang: string,
   toLang: string,
-  timeoutMs?: number
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<string[]> {
   if (texts.length === 0) return [];
 
@@ -38,7 +39,7 @@ export async function microsoftTranslateBatch(
   const data = await postJson<MicrosoftItem[]>(
     `${MICROSOFT_URL}?${params.toString()}`,
     payload,
-    { timeoutMs }
+    { timeoutMs, signal }
   );
 
   if (!Array.isArray(data)) {
@@ -59,9 +60,10 @@ export function microsoftTranslate(
   text: string,
   fromLang: string,
   toLang: string,
-  timeoutMs?: number
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<string> {
-  return microsoftTranslateBatch([text], fromLang, toLang, timeoutMs).then(
+  return microsoftTranslateBatch([text], fromLang, toLang, timeoutMs, signal).then(
     (results) => results[0] ?? ""
   );
 }

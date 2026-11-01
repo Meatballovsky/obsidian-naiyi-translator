@@ -53,7 +53,7 @@ export class BatchQueue {
     groupKey: string,
     scope: string,
     text: string,
-    run: (texts: string[]) => Promise<string[]>
+    run: (texts: string[], signal?: AbortSignal) => Promise<string[]>
   ): Promise<string> {
     const id = `${scope}\u0000${groupKey}`;
     return new Promise<string>((resolve, reject) => {
@@ -124,7 +124,7 @@ export class BatchQueue {
 
   private flush(
     group: Group,
-    run: (texts: string[]) => Promise<string[]>
+    run: (texts: string[], signal?: AbortSignal) => Promise<string[]>
   ): void {
     if (group.timer !== null) window.clearTimeout(group.timer);
     group.timer = null;
@@ -137,7 +137,7 @@ export class BatchQueue {
     this.queue.enqueue<string[]>({
       hash: `batch:${group.id}:${items[0].seq}`,
       scope: group.scope,
-      execute: () => run(texts),
+      execute: (signal) => run(texts, signal),
       resolve: (results) => {
         items.forEach((item, index) => item.resolve(results[index] ?? ""));
       },

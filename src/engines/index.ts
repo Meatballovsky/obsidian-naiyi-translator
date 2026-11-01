@@ -1,3 +1,4 @@
+import { protectText, validateTranslation, TranslationValidationError } from "./protection";
 import type { TranslatorSettings } from "../settings";
 import { googleTranslate } from "./google";
 import { microsoftTranslateBatch } from "./microsoft";
@@ -19,14 +20,15 @@ function sleep(ms: number): Promise<void> {
  */
 export async function providerIdentity(settings: TranslatorSettings): Promise<string> {
   const { engine, ai } = settings;
-  if (engine !== "ai") return engine;
+  if (engine !== "ai") return `v2:${engine}`;
   const promptHash = await hashKey(`${ai.systemPrompt}\u0000${ai.userPrompt}`);
-  return `ai\u0000${ai.baseUrl}\u0000${ai.model}\u0000${ai.temperature}\u0000${promptHash}`;
+  return `v2:ai\u0000${ai.baseUrl}\u0000${ai.model}\u0000${ai.temperature}\u0000${promptHash}`;
 }
 
 async function translateBatch(
   texts: string[],
-  settings: TranslatorSettings
+  settings: TranslatorSettings,
+  signal?: AbortSignal
 ): Promise<string[]> {
   const { engine, sourceLang, targetLang, requestTimeoutMs, ai } = settings;
 
@@ -36,13 +38,13 @@ async function translateBatch(
     // No reliable N:N mapping on the gtx endpoint; one request per unit.
     const out: string[] = [];
     for (const text of texts) {
-      out.push(await googleTranslate(text, sourceLang, targetLang, requestTimeoutMs));
+      out.push(await googleTranslate(text, sourceLang, targetLang, requestTimeoutMs, signal));
     }
     return out;
   }
 
   if (engine === "microsoft") {
-    return microsoftTranslateBatch(texts, sourceLang, targetLang, requestTimeoutMs);
+    return microsoftTranslateBatch(texts, sourceLang, targetLang, requestTimeoutMs, signal);
   }
 
   try {
@@ -51,11 +53,12 @@ async function translateBatch(
       texts,
       targetLang,
       sourceLang,
-      aiTimeout(texts, settings)
+      aiTimeout(texts, settings), signal
     );
   } catch (error) {
     if (!(error instanceof BatchCountMismatchError)) throw error;
     for (let attempt = 1; attempt <= BATCH_MAP_RETRIES; attempt++) {
+      if (signal?.aborted) throw Object.assign(new Error("cancelled"), { cancelled: true });
       await sleep(BATCH_RETRY_BASE_MS * 2 ** (attempt - 1));
       try {
         return await aiTranslateBatch(
@@ -63,7 +66,7 @@ async function translateBatch(
           texts,
           targetLang,
           sourceLang,
-          aiTimeout(texts, settings)
+          aiTimeout(texts, settings), signal
         );
       } catch (retryError) {
         if (!(retryError instanceof BatchCountMismatchError)) throw retryError;
@@ -73,7 +76,7 @@ async function translateBatch(
     // cannot fan out into a burst past the rate limiter.
     const out: string[] = [];
     for (const text of texts) {
-      out.push(await aiTranslate(ai, text, targetLang, sourceLang, aiTimeout([text], settings)));
+      out.push(await aiTranslate(ai, text, targetLang, sourceLang, aiTimeout([text], settings), signal));
     }
     return out;
   }
@@ -103,16 +106,23 @@ export function maxItemsPerBatch(settings: TranslatorSettings): number {
 
 export async function translateTexts(
   texts: string[],
-  settings: TranslatorSettings
+  settings: TranslatorSettings,
+  signal?: AbortSignal
 ): Promise<string[]> {
-  const clean = texts.filter((text) => text.trim().length > 0);
-  if (clean.length !== texts.length) {
-    // Preserve index alignment for the caller.
-    const results = await translateBatch(clean, settings);
-    let cursor = 0;
-    return texts.map((text) =>
-      text.trim().length > 0 ? results[cursor++] ?? "" : ""
-    );
-  }
-  return translateBatch(texts, settings);
+  const protectedTexts = texts.map(protectText);
+  const indexes = protectedTexts.flatMap((item, index) => /[\p{L}\p{N}]/u.test(item.prose) ? [index] : []);
+  const results = await translateBatch(indexes.map((index) => protectedTexts[index].text), settings, signal);
+  if (results.length !== indexes.length) throw new TranslationValidationError("Translation result count mismatch.");
+  const output = texts.map((text) => text.trim() ? text : "");
+  indexes.forEach((index, position) => {
+    const item = protectedTexts[index];
+    const result = results[position];
+    const restored = item.restore(result);
+    // Remove protected material from the check so preserved URLs/code do not
+    // make a successful translation appear to be an untranslated passage.
+    const translatedProse = result.replace(/ZXQNAIYIX*\d+QXZ/g, " ");
+    validateTranslation(item.prose, translatedProse, settings.targetLang);
+    output[index] = restored;
+  });
+  return output;
 }

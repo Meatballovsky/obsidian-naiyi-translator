@@ -41,6 +41,10 @@ For manual installation, download `main.js`, `manifest.json`, and `styles.css` f
 
 The frog has no secondary menu or selection-translation action. Notes remain unchanged on disk. Online engines send text to their providers; a locally hosted model keeps translation requests on your own machine.
 
+Translation requests obey both an in-flight concurrency limit and a launch-rate limit, including retries and batch fallbacks. Common code, formulas, link destinations, and hard line breaks are protected and checked before results enter the cache. Long non-Chinese output for a Chinese target is flagged conservatively; this is a basic validation check, not a translation-quality guarantee. Enable Markdown rendering to display restored inline code and links as formatting.
+
+The native HTTP transport cannot forcibly abort an already-issued request. Cancelling the layer discards its result and prevents pending attempts from starting; an active request remains counted until its transport settles.
+
 ---
 
 ## 缘起：从「陪读蛙」到「奈译屋」

@@ -1,3 +1,6 @@
+import { protectText, validateTranslation, TranslationValidationError } from "../src/engines/protection";
+import { TransportLimiter, transportLimiter } from "../src/engines/transport";
+import { translateTexts } from "../src/engines";
 import assert from "node:assert/strict";
 // Scheduling uses the host window; Node provides equivalent timer primitives.
 Object.assign(globalThis, { window: { setTimeout, clearTimeout } });
@@ -76,6 +79,138 @@ function retryContext(over: Partial<RequestRetryContext> = {}): RequestRetryCont
 }
 
 async function main(): Promise<void> {
+  await test("logical queue caps slow in-flight tasks even with fast token refill", async () => {
+    const queue = mkQueue({ capacity: 2, rate: 10000 });
+    let active = 0, peak = 0;
+    await Promise.all(Array.from({ length: 8 }, (_, i) => new Promise<void>((resolve, reject) => {
+      queue.enqueue(mkTask(`slow-${i}`, async () => {
+        peak = Math.max(peak, ++active); await sleep(15); active--;
+      }, { resolve, reject }));
+    })));
+    assert.equal(peak, 2); queue.clear();
+  });
+
+  await test("transport launch rate applies independently of concurrency", async () => {
+    const limiter = new TransportLimiter(); limiter.configure(1, 20);
+    const starts: number[] = [];
+    await Promise.all(Array.from({ length: 3 }, () => limiter.run(async () => { starts.push(Date.now()); })));
+    assert.ok(starts[1] - starts[0] >= 40);
+    assert.ok(starts[2] - starts[1] >= 40);
+  });
+
+  await test("cancelled AI batch retries never dispatch another HTTP attempt", async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    transportLimiter.configure(4, 10000);
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      controller.abort();
+      return new Response(JSON.stringify({ choices: [{ message: { content: "incorrect single segment" } }] }), { status: 200 });
+    };
+    try {
+      await assert.rejects(translateTexts(["First paragraph.", "Second paragraph."], {
+        ...DEFAULT_SETTINGS, engine: "ai", ai: { ...DEFAULT_SETTINGS.ai, baseUrl: "https://example.org/v1" },
+      }, controller.signal), isCancelled);
+      assert.equal(calls, 1);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  await test("real transport concurrency remains capped after token refill", async () => {
+    const limiter = new TransportLimiter();
+    limiter.configure(2, 10000);
+    let active = 0, peak = 0;
+    await Promise.all(Array.from({ length: 10 }, () => limiter.run(async () => {
+      peak = Math.max(peak, ++active);
+      await sleep(12); active--;
+    })));
+    assert.equal(peak, 2);
+  });
+
+  await test("timeout and cancellation retain physical slots until transport settles", async () => {
+    const limiter = new TransportLimiter(); limiter.configure(1, 10000);
+    let finish!: (value: string) => void;
+    const timed = limiter.run(() => new Promise<string>((resolve) => { finish = resolve; }), 5);
+    await assert.rejects(timed, /timed out/);
+    let nextStarted = false;
+    const controller = new AbortController();
+    const cancelled = limiter.run(async () => { throw new Error("must not dispatch"); }, 100, controller.signal);
+    controller.abort();
+    await assert.rejects(cancelled, isCancelled);
+    const next = limiter.run(async () => { nextStarted = true; return "next"; });
+    await sleep(10);
+    assert.equal(nextStarted, false, "timed-out physical request still occupies slot");
+    finish("late");
+    assert.equal(await next, "next");
+    const activeController = new AbortController();
+    let finishCancelled!: () => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const activeRequest = limiter.run(() => new Promise<void>((resolve) => { finishCancelled = resolve; markStarted(); }), 100, activeController.signal);
+    await started; activeController.abort();
+    await assert.rejects(activeRequest, isCancelled);
+    let afterStarted = false;
+    const after = limiter.run(async () => { afterStarted = true; });
+    await sleep(5); assert.equal(afterStarted, false, "cancelled physical request still occupies slot");
+    finishCancelled(); await after;
+  });
+
+  await test("protected code math links and line breaks round-trip with strict token checks", () => {
+    const source = 'Read `a < b` with $x^2$ at [the link](../note.md#part) or https://example.org/a.\n[[Target|Alias]]\n-----';
+    const item = protectText(source);
+    assert.equal(item.restore(item.text.replace("Read", "阅读")), source.replace("Read", "阅读"));
+    const token = item.text.match(/ZXQNAIYI\d+QXZ/)![0];
+    assert.throws(() => item.restore(item.text.replace(token, "")), TranslationValidationError);
+    assert.throws(() => item.restore(item.text + token), TranslationValidationError);
+    assert.throws(() => item.restore(item.text + "ZXQNAIYI999QXZ"), TranslationValidationError);
+    assert.equal(protectText("ZXQNAIYI0QXZ and `code`").restore(protectText("ZXQNAIYI0QXZ and `code`").text), "ZXQNAIYI0QXZ and `code`");
+  });
+
+  await test("Chinese result validation rejects long echoed/wrong-language prose but keeps short labels", () => {
+    const source = "This is a sufficiently long English passage about how readers understand technical material in context.";
+    assert.throws(() => validateTranslation(source, source, "zh-CN"), TranslationValidationError);
+    assert.throws(() => validateTranslation(source, "Este es un texto largo en otro idioma que no es chino en absoluto.", "zh-TW"), TranslationValidationError);
+    validateTranslation(source, "这是关于读者理解专业资料的一段中文。", "zh-CN");
+    validateTranslation("OpenAI API", "OpenAI API", "zh-CN");
+    validateTranslation(source, source, "en");
+    validateTranslation("中文与 English mixed text", "English", "zh-CN");
+    assert.throws(() => validateTranslation("Text", "", "en"), TranslationValidationError);
+  });
+
+  await test("engine protects actual payloads and rejects damaged or echoed replies", async () => {
+    const originalFetch = globalThis.fetch;
+    const settings = { ...DEFAULT_SETTINGS, requestRate: 10000 };
+    transportLimiter.configure(4, 10000);
+    let calls = 0;
+    let damage = false;
+    globalThis.fetch = async (input) => {
+      calls++;
+      const payload = new URL(String(input)).searchParams.get("q")!;
+      assert.ok(!payload.includes("`code`"));
+      const translated = damage ? payload.replace(/ZXQNAIYI\d+QXZ/, "lost") : payload.replace("Read", "阅读");
+      return new Response(JSON.stringify([[[translated]]]), { status: 200 });
+    };
+    try {
+      assert.deepEqual(await translateTexts(["Read `code`\nnext", "", "$x$"], settings), ["阅读 `code`\nnext", "", "$x$"]);
+      assert.equal(calls, 1, "pure protected text and blanks need no request");
+      damage = true;
+      await assert.rejects(translateTexts(["Read `code`"], settings), TranslationValidationError);
+      damage = false;
+      await assert.rejects(translateTexts(["This long English paragraph remains exactly unchanged despite asking for a complete Chinese translation."], settings), TranslationValidationError);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  await test("validation failures use the bounded retry budget and cannot resolve as cacheable results", async () => {
+    const queue = mkQueue({ rate: 10000, maxRetries: 2, baseRetryDelayMs: 1 });
+    let attempts = 0, resolved = false;
+    const result = new Promise((resolve) => queue.enqueue(mkTask("invalid", async () => {
+      attempts++; throw new TranslationValidationError("invalid translation");
+    }, { resolve: () => { resolved = true; resolve(null); }, reject: resolve })));
+    assert.ok(await result instanceof TranslationValidationError);
+    assert.equal(attempts, 3); assert.equal(resolved, false);
+    queue.clear();
+  });
+
   await test("cancelled in-flight failures cannot retry or drain a new session", async () => {
     const queue = mkQueue({ capacity: 2 });
     let failOld!: (error: unknown) => void;

@@ -190,7 +190,7 @@ async function main(): Promise<void> {
   await test("collects prose blocks in reading order", () => {
     assert.deepEqual(texts(), [
       "Translating Papers",
-      "A paragraph with a link and inline_code().",
+      "A paragraph with [a link](#x) and `inline_code()`.",
       "Callout body text.",
       "Quoted prose.",
       "Bullet one",
@@ -223,7 +223,7 @@ async function main(): Promise<void> {
       candidate.text.includes("inline_code")
     );
     assert.ok(unit, "paragraph containing inline code should still translate");
-    assert.equal(extractText(unit!.el), "A paragraph with a link and inline_code().");
+    assert.equal(extractText(unit!.el), "A paragraph with [a link](#x) and `inline_code()`.");
   });
 
   await test("injected translation is never re-collected as source", () => {
@@ -246,7 +246,7 @@ async function main(): Promise<void> {
 
   await test("a translation rendered as Markdown does not cascade into new units", () => {
     const unit = collectUnits(root).find((candidate) =>
-      candidate.text.startsWith("A paragraph with a link")
+      candidate.text.startsWith("A paragraph with [a link]")
     )!;
     const before = texts();
     const renderMarkdown = (el: HTMLElement, markdown: string) => {
@@ -620,7 +620,7 @@ async function main(): Promise<void> {
     const settings = { ...DEFAULT_SETTINGS, renderMarkdown: false };
     const cache = new TranslationCache({ maxEntries: 20, ttlDays: 7 });
     for (const source of pane.querySelectorAll("p")) {
-      cache.set(await hashKey(`${source.textContent}\u0000auto\u0000zh-CN\u0000google`), "译文");
+      cache.set(await hashKey(`${source.textContent}\u0000auto\u0000zh-CN\u0000v2:google`), "译文");
     }
     const queue = new TranslateQueue({ capacity: 4, rate: 2, maxRetries: 0, baseRetryDelayMs: 1 });
     const batch = new BatchQueue(queue, { maxItems: 4, maxChars: 1000, delayMs: 1 });

@@ -115,6 +115,18 @@ export function extractText(el: HTMLElement): string {
     math.textContent = source ? (block ? `$$${source}$$` : `$${source}$`) : "";
   });
 
+  cloned.querySelectorAll("code").forEach((code) => {
+    const value = code.textContent ?? "";
+    const runs = value.match(/`+/g) ?? [];
+    const fence = "`".repeat(Math.max(0, ...runs.map((run) => run.length)) + 1);
+    code.textContent = fence + value + fence;
+  });
+  cloned.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
+    const label = link.textContent ?? "";
+    const target = link.getAttribute("data-href") ?? link.getAttribute("href");
+    if (target) link.textContent = `[${label}](${target})`;
+  });
+
   const text = (cloned.textContent ?? "").replace(/[ \t]+/g, " ").replace(/[ \t]*\n[ \t]*/g, "\n").trim();
   return stripProtected(text).length > 0 ? text : "";
 }

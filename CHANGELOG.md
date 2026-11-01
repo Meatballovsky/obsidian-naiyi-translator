@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.7
+
+- Enforce concurrent logical tasks and real HTTP attempts independently from request launch rate. Retries and individual batch fallbacks use the same transport limiter.
+- Keep real requests counted until the underlying transport settles, including after a timeout or logical cancellation. Propagate session cancellation to prevent queued requests and AI fallback attempts from starting.
+- Protect common inline code, math, URLs, Markdown destinations, wiki links, line breaks, and standalone separators with verified placeholders. Preserve code and link syntax when collecting rendered paragraphs.
+- Reject missing/duplicated placeholders and empty output before caching. Conservatively flag long non-Chinese prose returned for a Chinese target; short labels and mixed-language sources remain permissive. Validation failures use the configured retry budget.
+- Version translation cache identities to avoid reusing earlier unprotected results. No note files are modified.
+
 ## 0.1.6
 
 - Clear translated sections even when the reading view temporarily parks them outside the live DOM.

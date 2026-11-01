@@ -1,3 +1,4 @@
+import { transportLimiter } from "../engines/transport";
 import { defaultRequestRetryPolicy, type RequestRetryPolicy } from "../utils/retry-policy";
 
 /**
@@ -20,7 +21,8 @@ export interface QueueTask<T = unknown> {
   scope: string;
   /** Earliest dispatch time; the heap orders on this so retries sink to the back. */
   scheduleAt: number;
-  execute: () => Promise<T>;
+  execute: (signal?: AbortSignal) => Promise<T>;
+  controller?: AbortController;
   resolve: (value: T) => void;
   reject: (error: unknown) => void;
   attempts: number;
@@ -61,6 +63,7 @@ export class TranslateQueue {
 
   constructor(options: QueueOptions) {
     this.options = options;
+    transportLimiter.configure(options.capacity, options.rate);
     this.retryPolicy = options.retryPolicy ?? defaultRequestRetryPolicy;
     this.bucketTokens = options.capacity;
     this.lastRefillMs = Date.now();
@@ -72,6 +75,7 @@ export class TranslateQueue {
     this.refillTokens();
     this.options = { ...this.options, ...queueOptions };
     if (retryPolicy) this.retryPolicy = retryPolicy;
+    transportLimiter.configure(this.options.capacity, this.options.rate);
     if (options.capacity !== undefined) {
       // Clamp, never refill-to-full: raising the ceiling must not grant a free
       // burst, and repeated identical calls (config sync) must be no-ops.
@@ -120,7 +124,7 @@ export class TranslateQueue {
     }
     this.waitingByHash.clear();
     this.waiting.replace([]);
-    this.executingByHash.clear();
+    for (const task of this.executingByHash.values()) this.drain(task, cancelledError());
     this.clearTimer();
   }
 
@@ -168,7 +172,7 @@ export class TranslateQueue {
     }
 
     const now = Date.now();
-    while (this.bucketTokens >= 1 && this.waiting.size > 0) {
+    while (this.executingByHash.size < this.options.capacity && this.bucketTokens >= 1 && this.waiting.size > 0) {
       const task = this.waiting.peek();
       if (!task) break;
       if (task.drained) {
@@ -179,13 +183,14 @@ export class TranslateQueue {
       if (task.scheduleAt > now) break;
       this.waiting.pop();
       this.waitingByHash.delete(task.hash);
+      task.controller = new AbortController();
       this.executingByHash.set(task.hash, task);
       this.bucketTokens -= 1;
       void this.run(task);
     }
 
     const next = this.waiting.peek();
-    if (next) {
+    if (next && this.executingByHash.size < this.options.capacity) {
       const untilScheduled = Math.max(0, next.scheduleAt - Date.now());
       const untilToken =
         this.bucketTokens >= 1
@@ -197,7 +202,7 @@ export class TranslateQueue {
 
   private async run(task: QueueTask<unknown>): Promise<void> {
     try {
-      const value = await task.execute();
+      const value = await task.execute(task.controller?.signal);
       this.executingByHash.delete(task.hash);
       // Any completed request proves the provider recovered from rate limiting.
       if (!task.drained) {
@@ -206,8 +211,7 @@ export class TranslateQueue {
       }
     } catch (error) {
       this.executingByHash.delete(task.hash);
-      if (task.drained) return;
-      this.handleFailure(task, error);
+      if (!task.drained) this.handleFailure(task, error);
     }
     this.schedule();
   }
@@ -274,7 +278,6 @@ export class TranslateQueue {
     this.waiting.replace([]);
     for (const task of drained) this.drain(task, error);
     for (const task of Array.from(this.executingByHash.values())) {
-      this.executingByHash.delete(task.hash);
       this.drain(task, error);
     }
     // One notice for the whole drained backlog, with no task attached so the
@@ -285,6 +288,7 @@ export class TranslateQueue {
   private drain(task: QueueTask<unknown>, error: unknown): void {
     if (task.drained) return;
     task.drained = true;
+    task.controller?.abort();
     task.reject(error);
   }
 

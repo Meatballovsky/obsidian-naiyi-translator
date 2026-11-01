@@ -78,13 +78,14 @@ async function requestChat(
   ai: AiEndpointSettings,
   systemPrompt: string,
   userPrompt: string,
-  timeoutMs?: number
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<string> {
   const data = await postJson<ChatCompletionResponse>(
     `${normalizeBaseUrl(ai.baseUrl)}/chat/completions`,
-    buildRequestBody(ai, systemPrompt, userPrompt),
+    buildRequestBody(ai, systemPrompt + "\nCopy all ZXQNAIYI...QXZ placeholders exactly once and unchanged. Do not translate or omit them.", userPrompt),
     {
-      timeoutMs,
+      timeoutMs, signal,
       headers: ai.apiKey ? { Authorization: `Bearer ${ai.apiKey}` } : undefined,
     }
   );
@@ -113,11 +114,12 @@ export async function aiTranslate(
   text: string,
   targetLang: string,
   sourceLang: string,
-  timeoutMs?: number
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<string> {
   if (!text.trim()) return "";
   const prompts = buildSinglePrompts(ai, targetLang, sourceLang);
-  return requestChat(ai, prompts.system, prompts.user(text), timeoutMs);
+  return requestChat(ai, prompts.system, prompts.user(text), timeoutMs, signal);
 }
 
 export function joinBatch(texts: string[]): string {
@@ -139,17 +141,18 @@ export async function aiTranslateBatch(
   texts: string[],
   targetLang: string,
   sourceLang: string,
-  timeoutMs?: number
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<string[]> {
   if (texts.length === 1) {
-    return [await aiTranslate(ai, texts[0], targetLang, sourceLang, timeoutMs)];
+    return [await aiTranslate(ai, texts[0], targetLang, sourceLang, timeoutMs, signal)];
   }
   const prompts = buildSinglePrompts(ai, targetLang, sourceLang);
   const raw = await requestChat(
     ai,
     `${prompts.system}\n\n${BATCH_RULES}`,
     prompts.user(joinBatch(texts)),
-    timeoutMs
+    timeoutMs, signal
   );
   return parseBatchResult(raw, texts.length);
 }

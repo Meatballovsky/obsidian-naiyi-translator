@@ -203,7 +203,7 @@ export class Orchestrator {
         this.groupKey(),
         sessionId ?? "oneshot",
         text,
-        (texts) => translateTexts(texts, settings)
+        (texts, signal) => translateTexts(texts, settings, signal)
       );
       if (epoch !== this.epoch || !this.running || !el.isConnected || !this.root?.contains(el)) return;
       if (translated.trim()) {

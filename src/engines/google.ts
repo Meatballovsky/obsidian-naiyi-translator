@@ -14,7 +14,8 @@ export async function googleTranslate(
   text: string,
   fromLang: string,
   toLang: string,
-  timeoutMs?: number
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<string> {
   if (!text.trim()) return "";
   const url =
@@ -23,7 +24,7 @@ export async function googleTranslate(
     `&tl=${encodeURIComponent(toLang)}&dt=t` +
     `&q=${encodeURIComponent(text)}`;
 
-  const data = await getJson<unknown[]>(url, { timeoutMs });
+  const data = await getJson<unknown[]>(url, { timeoutMs, signal });
   const blocks = data?.[0];
   if (!Array.isArray(blocks)) return "";
 

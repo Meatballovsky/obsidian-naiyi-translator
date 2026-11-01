@@ -1,3 +1,4 @@
+import { transportLimiter } from "./transport";
 import { requestUrl } from "obsidian";
 
 import { attachRequestErrorMeta, parseRetryAfterMs } from "../utils/retry-policy";
@@ -9,28 +10,7 @@ export interface HttpError extends Error {
 export interface PostJsonOptions {
   headers?: Record<string, string>;
   timeoutMs?: number;
-}
-
-class TimeoutError extends Error {
-  status = 0;
-  constructor() {
-    super("Request timed out");
-    this.name = "TimeoutError";
-    attachRequestErrorMeta(this, { kind: "timeout" });
-  }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs?: number): Promise<T> {
-  if (!timeoutMs || timeoutMs <= 0) return promise;
-  let timer: number | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = window.setTimeout(() => reject(new TimeoutError()), timeoutMs);
-  });
-  // The underlying request keeps running but its result is discarded; callers
-  // gate on a session version so a late response can never paint.
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer !== undefined) window.clearTimeout(timer);
-  });
+  signal?: AbortSignal;
 }
 
 function statusError(
@@ -59,8 +39,7 @@ export async function postJson<T = unknown>(
   body: unknown,
   options: PostJsonOptions = {}
 ): Promise<T> {
-  const response = await withTimeout(
-    requestUrl({
+  const response = await transportLimiter.run(() => requestUrl({
       url,
       method: "POST",
       headers: {
@@ -69,9 +48,7 @@ export async function postJson<T = unknown>(
       },
       body: JSON.stringify(body),
       throw: false,
-    }),
-    options.timeoutMs
-  );
+    }), options.timeoutMs, options.signal);
   if (response.status < 200 || response.status >= 300) {
     throw statusError(response.status, response.text ?? "", response.headers);
   }
@@ -82,9 +59,8 @@ export async function getJson<T = unknown>(
   url: string,
   options: PostJsonOptions = {}
 ): Promise<T> {
-  const response = await withTimeout(
-    requestUrl({ url, method: "GET", throw: false }),
-    options.timeoutMs
+  const response = await transportLimiter.run(() => requestUrl({ url, method: "GET", throw: false }),
+    options.timeoutMs, options.signal
   );
   if (response.status < 200 || response.status >= 300) {
     throw statusError(response.status, response.text ?? "", response.headers);
