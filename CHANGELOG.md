@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.10
+
+- Preserve complete Markdown link punctuation and destinations while translating link labels, including URLs containing parentheses.
+- Show clickable link labels in plain-text translation mode without parsing HTML.
+- Refresh translation cache identities to avoid reusing links damaged by older versions.
+
 ## 0.1.9
 
 - Added an optional, experimental Bilibili Index-Translate 35B-A3B preset using the official anonymous public API. Existing engine selections are preserved; custom AI keys are never read by this adapter.

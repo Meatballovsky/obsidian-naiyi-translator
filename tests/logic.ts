@@ -220,6 +220,19 @@ async function main(): Promise<void> {
     assert.equal(protectText("ZXQNAIYI0QXZ and `code`").restore(protectText("ZXQNAIYI0QXZ and `code`").text), "ZXQNAIYI0QXZ and `code`");
   });
 
+  await test("link punctuation is protected while labels translate and destinations stay exact", () => {
+    const source = 'Read [chipmakers](https://example.org/a_(b)?x=1&y=2) and [equipment](../note.md#part).';
+    const item = protectText(source);
+    assert.ok(!/[\[\]()]/.test(item.text));
+    assert.ok(!item.text.includes('https://'));
+    assert.deepEqual(item.labels, ['chipmakers', 'equipment']);
+    assert.equal(item.restore(item.text, ['芯片制造商', '设备']),
+      source.replace('chipmakers', '芯片制造商').replace('equipment', '设备'));
+    const code = protectText('Keep `[label](https://example.org)` intact.');
+    assert.ok(!code.prose.includes('label'));
+    assert.equal(code.restore(code.text), 'Keep `[label](https://example.org)` intact.');
+  });
+
   await test("Chinese result validation rejects long echoed/wrong-language prose but keeps short labels", () => {
     const source = "This is a sufficiently long English passage about how readers understand technical material in context.";
     assert.throws(() => validateTranslation(source, source, "zh-CN"), TranslationValidationError);
@@ -247,6 +260,8 @@ async function main(): Promise<void> {
     try {
       assert.deepEqual(await translateTexts(["Read `code`\nnext", "", "$x$"], settings), ["阅读 `code`\nnext", "", "$x$"]);
       assert.equal(calls, 1, "pure protected text and blanks need no request");
+      assert.deepEqual(await translateTexts(["Read [Read](https://example.org/one) and [Read](../two).", "[Read](#three)"], settings),
+        ["阅读 [阅读](https://example.org/one) and [阅读](../two).", "[阅读](#three)"]);
       damage = true;
       await assert.rejects(translateTexts(["Read `code`"], settings), TranslationValidationError);
       damage = false;

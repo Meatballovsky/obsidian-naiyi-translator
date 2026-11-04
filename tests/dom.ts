@@ -283,6 +283,23 @@ async function main(): Promise<void> {
     assert.equal(extractText(unit!.el), "A paragraph with [a link](#x) and `inline_code()`.");
   });
 
+  await test("plain-text translations render clickable labels without exposing URLs or executing HTML", () => {
+    const source = document.createElement('p');
+    root.append(source);
+    inject(source, { state: 'done', renderMarkdown: false,
+      translation: '韩国的[芯片制造商](https://example.org/a_(b)?x=1&y=2)与[笔记](../note.md#part)。<img src=x onerror=alert(1)> [危险](javascript:alert(1)) [隐藏](< java\tscript:alert(1)>)' }, () => { throw new Error('plain mode must not invoke Markdown'); });
+    const wrapper = source.nextElementSibling!;
+    const anchors = wrapper.querySelectorAll('a');
+    assert.equal(anchors.length, 2);
+    assert.equal(anchors[0].textContent, '芯片制造商');
+    assert.equal(anchors[0].getAttribute('href'), 'https://example.org/a_(b)?x=1&y=2');
+    assert.equal(anchors[1].getAttribute('data-href'), '../note.md#part');
+    assert.ok(!wrapper.textContent!.includes('https://'));
+    assert.equal(wrapper.querySelector('img'), null);
+    assert.ok(wrapper.textContent!.includes('[危险](javascript:alert(1))'));
+    dropUnit(source); source.remove();
+  });
+
   await test("injected translation is never re-collected as source", () => {
     const unit = collectUnits(root).find((candidate) => candidate.text === "Quoted prose.")!;
     inject(unit.el, { state: "done", translation: "被引用的文字。" }, (el, md) => {
@@ -677,7 +694,7 @@ async function main(): Promise<void> {
     const settings = { ...DEFAULT_SETTINGS, renderMarkdown: false };
     const cache = new TranslationCache({ maxEntries: 20, ttlDays: 7 });
     for (const source of pane.querySelectorAll("p")) {
-      cache.set(await hashKey(`${source.textContent}\u0000auto\u0000zh-CN\u0000v2:google`), "译文");
+      cache.set(await hashKey(`${source.textContent}\u0000auto\u0000zh-CN\u0000v3:google`), "译文");
     }
     const queue = new TranslateQueue({ capacity: 4, rate: 2, maxRetries: 0, baseRetryDelayMs: 1 });
     const batch = new BatchQueue(queue, { maxItems: 4, maxChars: 1000, delayMs: 1 });

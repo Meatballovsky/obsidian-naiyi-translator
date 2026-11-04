@@ -21,10 +21,10 @@ function sleep(ms: number): Promise<void> {
  */
 export async function providerIdentity(settings: TranslatorSettings): Promise<string> {
   const { engine, ai } = settings;
-  if (engine === "bilibili") return `v2:bilibili:${BILIBILI_MODEL}`;
-  if (engine !== "ai") return `v2:${engine}`;
+  if (engine === "bilibili") return `v3:bilibili:${BILIBILI_MODEL}`;
+  if (engine !== "ai") return `v3:${engine}`;
   const promptHash = await hashKey(`${ai.systemPrompt}\u0000${ai.userPrompt}`);
-  return `v2:ai\u0000${ai.baseUrl}\u0000${ai.model}\u0000${ai.temperature}\u0000${promptHash}`;
+  return `v3:ai\u0000${ai.baseUrl}\u0000${ai.model}\u0000${ai.temperature}\u0000${promptHash}`;
 }
 
 async function translateBatch(
@@ -118,19 +118,39 @@ export async function translateTexts(
   signal?: AbortSignal
 ): Promise<string[]> {
   const protectedTexts = texts.map(protectText);
-  const indexes = protectedTexts.flatMap((item, index) => /[\p{L}\p{N}]/u.test(item.prose) ? [index] : []);
-  const results = await translateBatch(indexes.map((index) => protectedTexts[index].text), settings, signal);
+  const items = protectedTexts.flatMap((item) => [item, ...item.labels.map(protectText)]);
+  const indexes = items.flatMap((item, index) => /[\p{L}\p{N}]/u.test(item.prose) ? [index] : []);
+  // Link labels add work beyond the original paragraph batch. Keep expanded
+  // batches inside the same item/character limits and transport cancellation.
+  const results: string[] = [];
+  let pending: string[] = [], chars = 0;
+  const flush = async () => {
+    if (pending.length) results.push(...await translateBatch(pending, settings, signal));
+    pending = []; chars = 0;
+  };
+  for (const index of indexes) {
+    const text = items[index].text;
+    if (pending.length && (pending.length >= maxItemsPerBatch(settings) || chars + text.length > settings.maxCharsPerBatch)) await flush();
+    pending.push(text); chars += text.length;
+  }
+  await flush();
   if (results.length !== indexes.length) throw new TranslationValidationError("Translation result count mismatch.");
-  const output = texts.map((text) => text.trim() ? text : "");
+  const output = items.map((item) => item.text);
   indexes.forEach((index, position) => {
-    const item = protectedTexts[index];
+    const item = items[index];
     const result = results[position];
-    const restored = item.restore(result);
+    item.restore(result);
     // Remove protected material from the check so preserved URLs/code do not
     // make a successful translation appear to be an untranslated passage.
     const translatedProse = result.replace(/ZXQNAIYIX*\d+QXZ/g, " ");
     validateTranslation(item.prose, translatedProse, settings.targetLang);
-    output[index] = restored;
+    output[index] = result;
   });
-  return output;
+  let offset = 0;
+  return protectedTexts.map((item) => {
+    const base = offset;
+    offset += 1 + item.labels.length;
+    return item.restore(output[base], item.labels.map((_label, index) =>
+      items[base + 1 + index].restore(output[base + 1 + index])));
+  });
 }

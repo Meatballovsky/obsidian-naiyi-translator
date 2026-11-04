@@ -1,7 +1,7 @@
 {
   "id": "naiyi-translate",
   "name": "Naiyi Translate",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "minAppVersion": "1.8.7",
   "description": "Inline bilingual reading with scroll-loaded translations, free services, and OpenAI-compatible engines.",
   "author": "Meatballovsky",

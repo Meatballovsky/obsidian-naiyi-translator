@@ -1,5 +1,6 @@
 import { restoreAllLineSegments, restoreLineSegments } from "../chunk/line-segments";
 import { Component } from "obsidian";
+import { linkTarget, markdownLinkPattern } from "../utils/links";
 import {
   TEXT_CLASS,
   UNIT_ATTRIBUTE,
@@ -131,6 +132,31 @@ function shadeText(container: HTMLElement): void {
   flush();
 }
 
+/** Plain-text mode still presents hyperlinks as links, without parsing HTML. */
+function renderPlainText(container: HTMLElement, text: string): void {
+  let offset = 0;
+  for (const match of text.matchAll(markdownLinkPattern())) {
+    const target = linkTarget(match[2]);
+    // Do not turn executable or unknown URI schemes into active links.
+    const protocolTarget = target.replace(/[\u0000-\u0020\u007f]/g, "");
+    if (/^[a-z][a-z\d+.-]*:/i.test(protocolTarget) && !/^(https?:|mailto:|obsidian:)/i.test(protocolTarget)) continue;
+    container.append(text.slice(offset, match.index));
+    const anchor = container.createEl("a");
+    anchor.textContent = match[1];
+    anchor.setAttribute("href", target);
+    if (/^(https?:|mailto:)/i.test(target)) {
+      anchor.className = "external-link";
+      anchor.setAttribute("rel", "noopener noreferrer");
+      anchor.setAttribute("target", "_blank");
+    } else {
+      anchor.className = "internal-link";
+      anchor.setAttribute("data-href", target);
+    }
+    offset = match.index! + match[0].length;
+  }
+  container.append(text.slice(offset));
+}
+
 function makeWrapper(el: HTMLElement, style: string = "card"): HTMLElement {
   const wrapper = el.createDiv();
   wrapper.detach();
@@ -233,7 +259,7 @@ export function inject(
       throw error;
     }
   } else {
-    content.textContent = text;
+    renderPlainText(content, text);
     finish();
   }
 }

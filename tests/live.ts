@@ -29,6 +29,7 @@ async function main(): Promise<void> {
       assert.ok(result.includes("`print(x)`"));
       assert.ok(result.includes("$x^2$"));
       assert.ok(result.includes("https://example.org/test"));
+      assert.match(result, /\[[^\]\n]+\]\(https:\/\/example\.org\/test\)/, "link delimiters must survive translation");
       assert.ok(result.includes("\n"));
       assert.ok(!result.includes("ZXQNAIYI"));
     });
@@ -39,6 +40,15 @@ async function main(): Promise<void> {
     out.forEach((text, index) => {
       assert.ok(text.trim().length > 0, `item ${index} came back empty`);
     });
+  });
+
+  await test("microsoft preserves several clickable links in a long paragraph", async () => {
+    const source = 'A research team studies two different systems. On the first system, faster processors improve performance, using [new chips](https://example.org/chips) and [memory equipment](https://example.org/memory) installed in a small laboratory. On the second system, older equipment runs more slowly. If you exclude the new servers, performance has fallen since the previous experiment. In another laboratory, the [older machines are slowing down](https://example.org/machines). The researchers are comparing the systems carefully before drawing conclusions.';
+    const [result] = await translateTexts([source], { ...DEFAULT_SETTINGS, engine: "microsoft", requestTimeoutMs: 15000 });
+    for (const path of ['chips', 'memory', 'machines']) {
+      assert.match(result, new RegExp('\\[[^\\]\\n]+\\]\\(https://example\\.org/' + path + '\\)'));
+    }
+    assert.ok(!result.includes('ZXQNAIYI'));
   });
 
   await test("microsoft does not let a bare < become a tag", async () => {
