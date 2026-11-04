@@ -41,7 +41,9 @@ For manual installation, download `main.js`, `manifest.json`, and `styles.css` f
 
 The frog has no secondary menu or selection-translation action. Notes remain unchanged on disk. Online engines send text to their providers; a locally hosted model keeps translation requests on your own machine.
 
-Translation requests obey both an in-flight concurrency limit and a launch-rate limit, including retries and batch fallbacks. Common code, formulas, link destinations, and hard line breaks are protected and checked before results enter the cache. Long non-Chinese output for a Chinese target is flagged conservatively; this is a basic validation check, not a translation-quality guarantee. Enable Markdown rendering to display restored inline code and links as formatting.
+Translation requests obey both an in-flight concurrency limit and a launch-rate limit, including retries and batch fallbacks. Common code, formulas, link destinations, and hard line breaks are protected and checked before results enter the cache. Long non-Chinese output for a Chinese target is flagged conservatively; this is a basic validation check, not a translation-quality guarantee. Enable Markdown rendering to display restored inline code as formatting. Inline links remain clickable in plain-text mode.
+
+Google uses anonymous Web RPC, with the legacy endpoint reserved for protocol/server failures. It sends one physical request at a time, at least one second apart, and cools down for at least 30 seconds on HTTP 429 (then exponentially, respecting Retry-After for up to 24 hours). It does not rotate hosts on 429 or verification pages. These public endpoints can still throttle shared network/proxy exits; persistent failures may require another source.
 
 The native HTTP transport cannot forcibly abort an already-issued request. Cancelling the layer discards its result and prevents pending attempts from starting; an active request remains counted until its transport settles.
 
@@ -92,7 +94,7 @@ PDF、学术论文、抓取网页与 DOCX 经过清洗后，常以 Markdown 存�
 
 | 引擎                 | 特性与适用场景                        | 工程实现细节                                                                  |
 |:------------------ |:------------------------------ |:----------------------------------------------------------------------- |
-| **Google**         | 免费、免配置、即开即用（默认）                | 所用免费端点会重新切分句子，无法可靠保持批量段落 1:1 对齐，采用受控并发逐段流水线请求。                                    |
+| **Google**         | 免费、免配置、即开即用（默认）                | 所用免费端点会重新切分句子，无法可靠保持批量段落 1:1 对齐，优先使用网页 RPC，逐段串行、请求启动间隔至少 1 秒；旧版接口仅用于协议或服务故障回退。                                    |
 | **Microsoft Edge** | 免费、免配置、支持批量请求                  | 支持安全批量翻译，以字符串数组发送请求，并严格校验返回数组长度。                                         |
 | **Bilibili Index-Translate** | 官方免费公共接口、无需密钥（实验性） | 固定 35B-A3B 模型、关闭思考，长段受控分块；复用限速、取消和格式校验。 |
 | **自定义 AI**         | 本地 Ollama / OMLX / OpenAI 兼容端点 | 兼容本地与云端模型（如 Qwen2.5 / DeepSeek 等）。默认发送关闭思考的参数（是否生效取决于服务端），可单独配置 AI 请求总超时，以适应本地模型加载。 |
@@ -103,8 +105,9 @@ PDF、学术论文、抓取网页与 DOCX 经过清洗后，常以 Markdown 存�
 
 调用免费翻译端点可能遭遇 Rate Limit。奈译屋继承并重构了自适应退避熔断协议：
 
-* **全局熔断队列**：单次遭遇 `HTTP 429` 立即冻结**整个请求管线**（基础 5s 起步，指数翻倍，上限 5 分钟），杜绝滚雪球式全线报错；
-* **单探针恢复机制**：响应携带 `Retry-After` 时严格听从服务端指示；解冻窗口期仅派出**单个探测请求**，成功后再恢复并发 `capacity`；
+* **全局熔断队列**：单次遭遇 `HTTP 429` 立即冻结**调度队列**（基础 5s 起步，指数翻倍，上限 5 分钟），杜绝滚雪球式全线报错；
+* **Google 底层冷却**：Google 匿名接口在 429 后也冻结已排队的实际 HTTP 请求，至少等待 30 秒并指数退避；服务端要求更长等待时优先遵守（最多 24 小时）。切换翻译层或修改调度参数不会清掉本次冷却。遇到 429 或验证页面，不轮换域名继续请求；共享网络或代理出口仍可能受限，持续失败时可改用其他翻译源。
+* **单探针恢复机制**：退避参考响应携带的 `Retry-After`（通用队列最多 5 分钟，Google 底层冷却可更长）；解冻窗口期仅派出**单个探测请求**，成功后再恢复并发 `capacity`；
 * **并发折叠降噪**：同一时间窗口内的并发 429 只计为一次命中，请求成功即清空退避计数器；
 * **双轨重试预算**：限流退避重试（每段上限 8 次）与网络故障重试（`maxRetries`）解耦计算，限流不挤占常规重试预算；
 * **坏死快速熔断**：连续 5 轮限流窗口未恢复，或遭遇 401/403/404 致命状态码时，立即中止剩余积压任务并弹出全局单次警报。

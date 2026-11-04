@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11
+
+- Prefer anonymous Google Web RPC; retain legacy gtx only for protocol/server failures. Do not rotate endpoints on 429, verification pages, cancellation or timeout.
+- Serialize Google HTTP attempts at least one second apart, including link labels, retries and fallbacks.
+- Freeze already-queued Google HTTP attempts immediately on 429, with a 30-second exponential cooldown and longer Retry-After support. Cooldowns survive translation-layer toggles and scheduler reconfiguration.
+- Add protocol, pacing and physical-cooldown regression tests and explain shared-network throttling in the README.
+
 ## 0.1.10
 
 - Preserve complete Markdown link punctuation and destinations while translating link labels, including URLs containing parentheses.

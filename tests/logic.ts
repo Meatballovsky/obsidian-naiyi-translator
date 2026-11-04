@@ -1,4 +1,6 @@
 import { bilibiliTranslate, splitBilibiliText, BILIBILI_URL, BILIBILI_MODEL } from "../src/engines/bilibili";
+import { googleTranslate, GOOGLE_POLICY, parseGoogleRpc, parseGoogleLegacy } from "../src/engines/google";
+import { requestText } from "../src/engines/http";
 import { protectText, validateTranslation, TranslationValidationError } from "../src/engines/protection";
 import { TransportLimiter, transportLimiter } from "../src/engines/transport";
 import { maxItemsPerBatch, translateTexts } from "../src/engines";
@@ -80,6 +82,95 @@ function retryContext(over: Partial<RequestRetryContext> = {}): RequestRetryCont
 }
 
 async function main(): Promise<void> {
+  assert.equal(GOOGLE_POLICY.capacity, 1);
+  assert.equal(GOOGLE_POLICY.minIntervalMs, 1000);
+  assert.equal(GOOGLE_POLICY.rateLimitPauseMs, 30000);
+  // Real scheduling policies are covered below with short intervals; protocol
+  // mocks must not spend seconds between every synthetic link label.
+  GOOGLE_POLICY.minIntervalMs = 0;
+  GOOGLE_POLICY.rateLimitPauseMs = 30;
+  const rpcReply = (text: string) => ")]}'\n\n" + JSON.stringify([["wrb.fr", "MkEWBc", JSON.stringify([null, [[[null, null, null, null, null, [[text]]]]]])]]);
+
+  await test("Google parses framed RPC segments and rejects malformed/empty translations", () => {
+    assert.equal(parseGoogleRpc(rpcReply('译文。')), '译文。');
+    assert.equal(parseGoogleLegacy(JSON.stringify([[['第一句。'], ['第二句。']]])), '第一句。第二句。');
+    assert.throws(() => parseGoogleRpc(rpcReply('')));
+    assert.throws(() => parseGoogleRpc(rpcReply('译文').replace('MkEWBc', 'wrong')));
+    assert.throws(() => parseGoogleLegacy('[]'));
+    assert.throws(() => parseGoogleLegacy('<html>challenge</html>'));
+  });
+
+  await test("Google uses anonymous form RPC, falls back on protocol failure, never rotates on 429/challenges", async () => {
+    const oldFetch = globalThis.fetch;
+    transportLimiter.configure(4, 10000);
+    let calls = 0;
+    try {
+      globalThis.fetch = async (url, init) => {
+        calls++;
+        assert.ok(String(url).includes('/batchexecute?rpcids=MkEWBc'));
+        assert.equal(init?.method, 'POST');
+        assert.equal((init?.headers as Record<string,string>).Authorization, undefined);
+        const rpc = JSON.parse(new URLSearchParams(init?.body as string).get('f.req')!);
+        assert.deepEqual(JSON.parse(rpc[0][0][1]), [['A & B + C?', 'auto', 'zh-CN', true], [null]]);
+        return new Response(rpcReply('甲乙丙。'));
+      };
+      assert.equal(await googleTranslate('A & B + C?', 'auto', 'zh-CN', 100), '甲乙丙。');
+      calls = 0;
+      globalThis.fetch = async (url) => {
+        calls++;
+        if (calls === 1) return new Response('unsupported', {status: 404});
+        const params = new URL(String(url)).searchParams;
+        assert.equal(params.get('q'), 'Fallback sentence.');
+        assert.equal(params.get('strip'), '1');
+        return new Response(JSON.stringify([[['回退译文。']]]));
+      };
+      assert.equal(await googleTranslate('Fallback sentence.', 'en', 'zh-CN', 100), '回退译文。');
+      assert.equal(calls, 2);
+      calls = 0;
+      globalThis.fetch = async () => { calls++; return new Response('throttled', {status: 429, headers: {'Retry-After': '0.06'}}); };
+      await assert.rejects(googleTranslate('Rate limited.', 'en', 'zh-CN', 100), (e: unknown) => readMeta(e).statusCode === 429 && readMeta(e).retryAfterMs! >= 60);
+      assert.equal(calls, 1);
+      await sleep(65);
+      calls = 0;
+      globalThis.fetch = async () => { calls++; return new Response('<html>verify</html>'); };
+      await assert.rejects(googleTranslate('Challenge.', 'en', 'zh-CN', 100), /verification page/);
+      assert.equal(calls, 1);
+    } finally { globalThis.fetch = oldFetch; }
+  });
+
+  await test("provider transport policy serializes physical requests and prevents idle bursts", async () => {
+    const limiter = new TransportLimiter(); limiter.configure(4, 10000);
+    const policy = {key: 'google-test', capacity: 1, minIntervalMs: 25, rateLimitPauseMs: 60};
+    let active = 0, peak = 0; const starts: number[] = [];
+    await Promise.all(Array.from({length: 3}, () => limiter.run(async () => {
+      starts.push(Date.now()); peak = Math.max(peak, ++active); await sleep(8); active--;
+    }, 50, undefined, policy)));
+    assert.equal(peak, 1);
+    assert.ok(starts[1]-starts[0] >= 23 && starts[2]-starts[1] >= 23);
+  });
+
+  await test("HTTP 429 freezes already-waiting physical attempts across reconfiguration and cancellation", async () => {
+    const oldFetch = globalThis.fetch;
+    const policy = {key: 'http-cooldown-test', capacity: 1, minIntervalMs: 0, rateLimitPauseMs: 60};
+    transportLimiter.configure(4, 10000);
+    let calls = 0; const started = Date.now(); const controller = new AbortController();
+    globalThis.fetch = async () => { calls++; return calls === 1 ? new Response('limit', {status: 429}) : new Response('ok'); };
+    try {
+      const first = requestText('https://example.org/one', {}, {policy}).catch(e => e);
+      const second = requestText('https://example.org/two', {}, {policy, timeoutMs: 10});
+      const cancelled = requestText('https://example.org/cancelled', {}, {policy, signal: controller.signal}).catch(e => e);
+      assert.equal(readMeta(await first).statusCode, 429);
+      controller.abort(); assert.ok(isCancelled(await cancelled));
+      transportLimiter.configure(8, 10000);
+      await sleep(15); assert.equal(calls, 1);
+      let otherStarted = false;
+      await transportLimiter.run(async () => { otherStarted = true; });
+      assert.ok(otherStarted);
+      assert.equal(await second, 'ok'); assert.equal(calls, 2);
+      assert.ok(Date.now()-started >= 55);
+    } finally { globalThis.fetch = oldFetch; }
+  });
+
   await test("Bilibili chunks preserve Unicode, whitespace and whole protection tokens", () => {
     const input = ("Technical prose 😀 ZXQNAIYI123QXZ. ".repeat(130)) + "\nLast sentence.";
     const chunks = splitBilibiliText(input);
@@ -250,12 +341,13 @@ async function main(): Promise<void> {
     transportLimiter.configure(4, 10000);
     let calls = 0;
     let damage = false;
-    globalThis.fetch = async (input) => {
+    globalThis.fetch = async (input, init) => {
       calls++;
-      const payload = new URL(String(input)).searchParams.get("q")!;
+      const rpc = JSON.parse(new URLSearchParams(init?.body as string).get('f.req')!);
+      const payload = JSON.parse(rpc[0][0][1])[0][0] as string;
       assert.ok(!payload.includes("`code`"));
       const translated = damage ? payload.replace(/ZXQNAIYI\d+QXZ/, "lost") : payload.replace("Read", "阅读");
-      return new Response(JSON.stringify([[[translated]]]), { status: 200 });
+      return new Response(rpcReply(translated), { status: 200 });
     };
     try {
       assert.deepEqual(await translateTexts(["Read `code`\nnext", "", "$x$"], settings), ["阅读 `code`\nnext", "", "$x$"]);

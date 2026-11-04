@@ -32,7 +32,7 @@ export interface RequestUrlParam {
   throw?: boolean;
 }
 
-export async function requestUrl(request: RequestUrlParam | string): Promise<{ status: number; text: string; json: unknown }> {
+export async function requestUrl(request: RequestUrlParam | string): Promise<{ status: number; text: string; json: unknown; headers: Record<string, string> }> {
   const param = typeof request === "string" ? { url: request } : request;
   const response = await fetch(param.url, {
     method: param.method ?? "GET",
@@ -49,5 +49,5 @@ export async function requestUrl(request: RequestUrlParam | string): Promise<{ s
   if (!response.ok && param.throw !== false) {
     throw new Error(`HTTP ${response.status}`);
   }
-  return { status: response.status, text, json };
+  return { status: response.status, text, json, headers: Object.fromEntries(response.headers) };
 }
